@@ -8,13 +8,16 @@
 
 { pkgs ? import <nixpkgs> { } }:
 
+with pkgs;
+
 {
   # The `lib`, `modules`, and `overlay` names are special
   lib = import ./lib { inherit pkgs; }; # functions
   modules = import ./modules; # NixOS modules
   overlays = import ./overlays; # nixpkgs overlays
 
-  example-package = pkgs.callPackage ./pkgs/example-package { };
+  example-package = callPackage ./pkgs/example-package { };
+  nvboard = callPackage ./pkgs/nvboard { };
   # some-qt5-package = pkgs.libsForQt5.callPackage ./pkgs/some-qt5-package { };
   # ...
 }

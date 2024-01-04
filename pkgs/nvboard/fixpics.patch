@@ -1,0 +1,16 @@
+diff --git a/src/nvboard.cpp b/src/nvboard.cpp
+index ff6a75c..3759ff7 100644
+--- a/src/nvboard.cpp
++++ b/src/nvboard.cpp
+@@ -82,7 +82,11 @@ void nvboard_init(int vga_clk_cycle) {
+         0
+     );
+     
++#ifdef NVBOARD_HOME
++    nvboard_home = NVBOARD_HOME;
++#else
+     nvboard_home = getenv("NVBOARD_HOME");
++#endif
+     
+     load_background(main_renderer);
+     load_texture(main_renderer);
