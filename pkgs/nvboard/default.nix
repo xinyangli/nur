@@ -10,10 +10,10 @@ stdenv.mkDerivation rec {
   name = "nvboard";
   version = "0.3";
   src = fetchFromGitHub {
-    owner = "NJU-ProjectN";
+    owner = "xinyangli";
     repo = "nvboard";
-    rev = "23e79f86a6f915592cdf0af1c045a6f96082823c";
-    hash = "sha256-/sC2XD19MVgwKJH/rdCsfewR/Yf7cyd9okQV/AErP+k=";
+    rev = "edd54dd04d875cbe103b6996b7d25b9db21f292c";
+    hash = "sha256-FvtXjy/9st9JFpo9PYrAqKdLTaV/MnmBCjaIP/WagxE=";
   };
   patches = [ ./fixpics.patch ];
 
