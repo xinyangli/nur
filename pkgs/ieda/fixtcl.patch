@@ -1,0 +1,13 @@
+diff --git a/src/utility/tcl/ScriptEngine.hh b/src/utility/tcl/ScriptEngine.hh
+index 522e9878..cdee8af9 100644
+--- a/src/utility/tcl/ScriptEngine.hh
++++ b/src/utility/tcl/ScriptEngine.hh
+@@ -24,7 +24,7 @@
+ 
+ #pragma once
+ 
+-#include <tcl8.6/tcl.h>
++#include <tcl.h>
+ 
+ #include <memory>
+ #include <mutex>

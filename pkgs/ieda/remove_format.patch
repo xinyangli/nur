@@ -1,0 +1,3077 @@
+diff --git a/src/third_party/salt/CHANGELOG.md b/src/third_party/salt/CHANGELOG.md
+index 5408be85..33992341 100644
+--- a/src/third_party/salt/CHANGELOG.md
++++ b/src/third_party/salt/CHANGELOG.md
+@@ -149,8 +149,4 @@ diff -r ./base/net.h {ORIGIN REPOSITORY}/src/salt/base/net.h
+ >     void Write(const string& prefix, bool withNetInfo = true) const;
+ > 
+ >     friend ostream& operator<<(ostream& os, const Net& net) { net.Write(os); return os; }
+-```
+-
+-### Rename variable
+-
+-Changing some variable names and function names for the uniform naming convention does not change the code logic
+\ No newline at end of file
++```
+\ No newline at end of file
+diff --git a/src/third_party/salt/base/eval.cpp b/src/third_party/salt/base/eval.cpp
+index 1cf554b4..b1f8cc5e 100644
+--- a/src/third_party/salt/base/eval.cpp
++++ b/src/third_party/salt/base/eval.cpp
+@@ -7,7 +7,7 @@ namespace salt {
+ 
+ void WireLengthEvalBase::Update(const Tree& tree) {
+     wireLength = 0;
+-    tree.postOrder([&](const shared_ptr<TreeNode>& node) {
++    tree.PostOrder([&](const shared_ptr<TreeNode>& node) {
+         if (node->parent) {
+             wireLength += node->WireToParent();
+         }
+@@ -60,7 +60,7 @@ void ElmoreDelayEval::Update(double rd, Tree& tree, bool normalize) {
+     maxDelay = avgDelay = maxNorDelay = avgNorDelay = 0;
+ 
+     auto delay = GetDelay(rd, tree, numNodes);  // delay for all tree nodes
+-    tree.preOrder([&](const shared_ptr<TreeNode>& node) {
++    tree.PreOrder([&](const shared_ptr<TreeNode>& node) {
+         if (!node->pin || node == tree.source) return;
+         maxDelay = max(maxDelay, delay[node->id]);
+         avgDelay += delay[node->id];
+@@ -70,7 +70,7 @@ void ElmoreDelayEval::Update(double rd, Tree& tree, bool normalize) {
+     if (!normalize) return;
+ 
+     auto lb = GetDelayLB(rd, tree);  // delay lb for all pins, 0 is source
+-    // tree.preOrder([&](const shared_ptr<TreeNode>& node){
++    // tree.PreOrder([&](const shared_ptr<TreeNode>& node){
+     // 	if(!node->pin || node == tree.source) return;
+     // 	double norDelay = delay[node->id] / lb[node->id];
+     // 	maxNorDelay = max(maxNorDelay, norDelay);
+@@ -85,7 +85,7 @@ void ElmoreDelayEval::Update(double rd, Tree& tree, bool normalize) {
+ vector<double> ElmoreDelayEval::GetDelay(double rd, const Tree& tree, int numNode) {
+     // get node cap by post-order traversal
+     vector<double> cap(numNode, 0);
+-    tree.postOrder([&](const shared_ptr<TreeNode>& node) {
++    tree.PostOrder([&](const shared_ptr<TreeNode>& node) {
+         if (node->pin && node != tree.source) cap[node->id] = node->pin->cap;
+         for (auto c : node->children) {
+             cap[node->id] += cap[c->id];
+@@ -95,7 +95,7 @@ vector<double> ElmoreDelayEval::GetDelay(double rd, const Tree& tree, int numNod
+ 
+     // get delay by post-order traversal
+     vector<double> delay(numNode, 0);
+-    tree.preOrder([&](const shared_ptr<TreeNode>& node) {
++    tree.PreOrder([&](const shared_ptr<TreeNode>& node) {
+         if (node == tree.source)
+             delay[node->id] = rd * cap[node->id];
+         else {
+diff --git a/src/third_party/salt/base/flute.cpp b/src/third_party/salt/base/flute.cpp
+index 31672f46..f83f637f 100644
+--- a/src/third_party/salt/base/flute.cpp
++++ b/src/third_party/salt/base/flute.cpp
+@@ -14,8 +14,8 @@ void salt::FluteBuilder::Run(const salt::Net& net, salt::Tree& saltTree) {
+     }
+ 
+     // Obtain flute tree
+-    Flute::Tree flute_tree;
+-    flute_tree.branch = nullptr;
++    Flute::Tree fluteTree;
++    fluteTree.branch = nullptr;
+     int d = net.pins.size();
+     assert(d <= MAXD);
+     int x[MAXD], y[MAXD];
+@@ -23,17 +23,17 @@ void salt::FluteBuilder::Run(const salt::Net& net, salt::Tree& saltTree) {
+         x[i] = net.pins[i]->loc.x;
+         y[i] = net.pins[i]->loc.y;
+     }
+-    if (flute_tree.branch) free(flute_tree.branch);  // is it complete for mem leak?
+-    flute_tree = Flute::flute(d, x, y, FLUTE_ACCURACY);
++    if (fluteTree.branch) free(fluteTree.branch);  // is it complete for mem leak?
++    fluteTree = Flute::flute(d, x, y, FLUTE_ACCURACY);
+ 
+     // Build adjacency list
+     unordered_map<pair<DTYPE, DTYPE>, shared_ptr<salt::TreeNode>, boost::hash<pair<DTYPE, DTYPE>>> key2node;
+     for (auto p : net.pins) {
+         key2node[{p->loc.x, p->loc.y}] = make_shared<salt::TreeNode>(p);
+     }
+-    auto& t = flute_tree;
++    auto& t = fluteTree;
+ 
+-    auto find_or_create = [&](DTYPE x, DTYPE y) {
++    auto FindOrCreate = [&](DTYPE x, DTYPE y) {
+         auto it = key2node.find({x, y});
+         if (it == key2node.end()) {
+             shared_ptr<salt::TreeNode> node = make_shared<salt::TreeNode>(x, y);
+@@ -47,8 +47,8 @@ void salt::FluteBuilder::Run(const salt::Net& net, salt::Tree& saltTree) {
+         int j = t.branch[i].n;
+         if (t.branch[i].x == t.branch[j].x && t.branch[i].y == t.branch[j].y) continue;
+         // any more duplicate?
+-        shared_ptr<salt::TreeNode> n1 = find_or_create(t.branch[i].x, t.branch[i].y);
+-        shared_ptr<salt::TreeNode> n2 = find_or_create(t.branch[j].x, t.branch[j].y);
++        shared_ptr<salt::TreeNode> n1 = FindOrCreate(t.branch[i].x, t.branch[i].y);
++        shared_ptr<salt::TreeNode> n2 = FindOrCreate(t.branch[j].x, t.branch[j].y);
+         // printlog(LOG_INFO, "%d - %d\n", n1->pin?n1->pin->id:-1, n2->pin?n2->pin->id:-1);
+         n1->children.push_back(n2);
+         n2->children.push_back(n1);
+@@ -59,5 +59,5 @@ void salt::FluteBuilder::Run(const salt::Net& net, salt::Tree& saltTree) {
+     saltTree.SetParentFromUndirectedAdjList();
+     saltTree.net = &net;
+ 
+-    free(flute_tree.branch);
++    free(fluteTree.branch);
+ }
+\ No newline at end of file
+diff --git a/src/third_party/salt/base/mst.cpp b/src/third_party/salt/base/mst.cpp
+index 8a2ac098..48fe9352 100644
+--- a/src/third_party/salt/base/mst.cpp
++++ b/src/third_party/salt/base/mst.cpp
+@@ -68,7 +68,7 @@ void MstBuilder::RunPrimAlg(const Net& net, const vector<vector<int>>& adjLists,
+     }
+     for (int i = 0; i < numPins; ++i) {
+         if (prefixes[i] >= 0) {
+-            TreeNode::setParent(nodes[i], nodes[prefixes[i]]);
++            TreeNode::SetParent(nodes[i], nodes[prefixes[i]]);
+         }
+     }
+     tree.source = nodes[0];
+diff --git a/src/third_party/salt/base/net.cpp b/src/third_party/salt/base/net.cpp
+index ce852e22..246d2f23 100644
+--- a/src/third_party/salt/base/net.cpp
++++ b/src/third_party/salt/base/net.cpp
+@@ -39,7 +39,7 @@ bool Net::Read(istream& is) {
+     istringstream iss(buf);
+     iss >> id >> name >> numPin >> option;
+     assert(numPin > 0);
+-    with_cap = (option == "-cap");
++    withCap = (option == "-cap");
+ 
+     // pins
+     int i;
+@@ -48,7 +48,7 @@ bool Net::Read(istream& is) {
+     pins.resize(numPin);
+     for (auto& pin : pins) {
+         is >> i >> x >> y;
+-        if (with_cap) is >> c;
++        if (withCap) is >> c;
+         pin = make_shared<Pin>(x, y, i, c);
+     }
+ 
+@@ -67,7 +67,7 @@ void Net::Read(const string& fileName) {
+ string Net::GetHeader() const {
+     string header = to_string(id) + " " + name + " " + to_string(pins.size());
+     // string header = name + " " + to_string(pins.size());
+-    if (with_cap) header += " -cap";
++    if (withCap) header += " -cap";
+     return header;
+ }
+ 
+@@ -78,7 +78,7 @@ void Net::Write(ostream& os) const {
+     // pins
+     for (const auto& pin : pins) {
+         os << pin->id << " " << pin->loc.x << " " << pin->loc.y;
+-        if (with_cap) os << " " << pin->cap;
++        if (withCap) os << " " << pin->cap;
+         os << endl;
+     }
+ }
+diff --git a/src/third_party/salt/base/net.h b/src/third_party/salt/base/net.h
+index 3869359e..968eb8e2 100644
+--- a/src/third_party/salt/base/net.h
++++ b/src/third_party/salt/base/net.h
+@@ -6,19 +6,21 @@
+ 
+ #include "salt/utils/utils.h"
+ 
++using namespace std;
++
+ // #define DTYPE int  // same as flute.h, will overwrite it
+ typedef int DTYPE;
+ 
+ namespace salt {
+-using namespace std;
++
+ using Point = utils::PointT<DTYPE>;
+ using Box = utils::BoxT<DTYPE>;
+ 
+ class Pin
+ {
+  public:
+-  Point loc;
+   int id;  // 0 for source, should be in range [0, pin_num) for a net
++  Point loc;
+   double cap;
+ 
+   Pin(const Point& l, int i = -1, double c = 0.0) : loc(l), id(i), cap(c) {}
+@@ -33,7 +35,7 @@ class Net
+  public:
+   int id;
+   string name;
+-  bool with_cap = false;
++  bool withCap = false;
+ 
+   vector<shared_ptr<Pin>> pins;  // source is always the first one
+ 
+@@ -42,7 +44,7 @@ class Net
+     this->id = id;
+     this->name = name;
+     this->pins = pins;
+-    this->with_cap = true;
++    this->withCap = true;
+   }
+ 
+   void RanInit(int i, int numPin, DTYPE width = 100, DTYPE height = 100);  // random initialization
+diff --git a/src/third_party/salt/base/rsa.cpp b/src/third_party/salt/base/rsa.cpp
+index 8461cbbe..b76f4345 100644
+--- a/src/third_party/salt/base/rsa.cpp
++++ b/src/third_party/salt/base/rsa.cpp
+@@ -5,255 +5,227 @@
+ 
+ namespace salt {
+ 
+-constexpr double kPI = 3.14159265358979323846; /* pi */
+-
+-void RSABase::ReplaceRootChildren(Tree& tree)
+-{
+-  const Net* old_net = tree.net;
+-
+-  // create tmp_net and fake_pins
+-  Net tmp_net = *old_net;
+-  tmp_net.pins.clear();
+-  unordered_map<shared_ptr<Pin>, shared_ptr<TreeNode>> pin_to_old_node;
+-  tmp_net.pins.push_back(tree.source->pin);
+-  unordered_set<shared_ptr<Pin>> fake_pins;
+-  pin_to_old_node[tree.source->pin] = tree.source;
+-  for (auto c : tree.source->children) {  // only contains the direct children of tree.source
+-    shared_ptr<Pin> pin = c->pin;
+-    if (!pin) {
+-      pin = make_shared<Pin>(c->loc);
+-      fake_pins.insert(pin);
+-    }
+-    tmp_net.pins.push_back(pin);
+-    pin_to_old_node[pin] = c;
+-  }
+-  tree.source->children.clear();  // free them...
+-
+-  // get rsa and graft the old subtrees to it
+-  Run(tmp_net, tree);
+-  tree.postOrder([&](const shared_ptr<TreeNode>& node) {
+-    if (node->pin) {
+-      auto old_node = pin_to_old_node[node->pin];
+-      if (fake_pins.find(node->pin) != fake_pins.end())
+-        node->pin = nullptr;
+-      if (node->parent)
+-        for (auto c : old_node->children)
+-          TreeNode::setParent(c, node);
++constexpr double PI_VALUE = 3.14159265358979323846; /* pi */
++
++void RsaBase::ReplaceRootChildren(Tree& tree) {
++    const Net* oldNet = tree.net;
++
++    // create tmpNet and fakePins
++    Net tmpNet = *oldNet;
++    tmpNet.pins.clear();
++    unordered_map<shared_ptr<Pin>, shared_ptr<TreeNode>> pinToOldNode;
++    tmpNet.pins.push_back(tree.source->pin);
++    unordered_set<shared_ptr<Pin>> fakePins;
++    pinToOldNode[tree.source->pin] = tree.source;
++    for (auto c : tree.source->children) {  // only contains the direct children of tree.source
++        shared_ptr<Pin> pin = c->pin;
++        if (!pin) {
++            pin = make_shared<Pin>(c->loc);
++            fakePins.insert(pin);
++        }
++        tmpNet.pins.push_back(pin);
++        pinToOldNode[pin] = c;
+     }
+-  });
+-  tree.net = old_net;
+-  tree.RemoveTopoRedundantSteiner();
++    tree.source->children.clear();  // free them...
++
++    // get rsa and graft the old subtrees to it
++    Run(tmpNet, tree);
++    tree.PostOrder([&](const shared_ptr<TreeNode>& node) {
++        if (node->pin) {
++            auto oldNode = pinToOldNode[node->pin];
++            if (fakePins.find(node->pin) != fakePins.end()) node->pin = nullptr;
++            if (node->parent)
++                for (auto c : oldNode->children) TreeNode::SetParent(c, node);
++        }
++    });
++    tree.net = oldNet;
++    tree.RemoveTopoRedundantSteiner();
+ }
+ 
+-DTYPE RSABase::MaxOvlp(DTYPE z1, DTYPE z2)
+-{
+-  if (z1 >= 0 && z2 >= 0)
+-    return min(z1, z2);
+-  else if (z1 <= 0 && z2 <= 0)
+-    return max(z1, z2);
+-  else
+-    return 0;
++DTYPE RsaBase::MaxOvlp(DTYPE z1, DTYPE z2) {
++    if (z1 >= 0 && z2 >= 0)
++        return min(z1, z2);
++    else if (z1 <= 0 && z2 <= 0)
++        return max(z1, z2);
++    else
++        return 0;
+ }
+ 
+-void RsaBuilder::Run(const Net& net, Tree& tree)
+-{
+-  // Shift all pins to make source (0,0)
+-  auto ori_src_loc = net.source()->loc;
+-  for (auto& p : net.pins)
+-    p->loc -= ori_src_loc;
+-
+-  // Init inner_nodes with all sinks
+-  for (auto p : net.pins)
+-    if (p->IsSink())
+-      inner_nodes.insert(new InnerNode(make_shared<TreeNode>(p)));
+-
+-  // Process a inner node in each iteration
+-  while (!inner_nodes.empty()) {
+-    if ((*inner_nodes.begin())->dist == 0)
+-      break;  // TODO: clear
+-    shared_ptr<TreeNode> node = (*inner_nodes.begin())->tn;
+-    auto for_delete = *inner_nodes.begin();
+-    inner_nodes.erase(inner_nodes.begin());
+-    if (!node->pin) {  // steiner node
+-      assert(node->children.size() == 2);
+-      if (node->children[0])
+-        RemoveAnOuterNode(node->children[0], true, false);
+-      if (node->children[1])
+-        RemoveAnOuterNode(node->children[1], false, true);
+-      node->children[0]->parent = node;
+-      node->children[1]->parent = node;
+-    } else {  // pin node
+-      TryDominating(node);
++void RsaBuilder::Run(const Net& net, Tree& tree) {
++    // Shift all pins to make source (0,0)
++    auto oriSrcLoc = net.source()->loc;
++    for (auto& p : net.pins) p->loc -= oriSrcLoc;
++
++    // Init innerNodes with all sinks
++    for (auto p : net.pins)
++        if (p->IsSink()) innerNodes.insert(new InnerNode(make_shared<TreeNode>(p)));
++
++    // Process a inner node in each iteration
++    while (!innerNodes.empty()) {
++        if ((*innerNodes.begin())->dist == 0) break;  // TODO: clear
++        shared_ptr<TreeNode> node = (*innerNodes.begin())->tn;
++        auto forDelete = *innerNodes.begin();
++        innerNodes.erase(innerNodes.begin());
++        if (!node->pin) {  // steiner node
++            assert(node->children.size() == 2);
++            if (node->children[0]) RemoveAnOuterNode(node->children[0], true, false);
++            if (node->children[1]) RemoveAnOuterNode(node->children[1], false, true);
++            node->children[0]->parent = node;
++            node->children[1]->parent = node;
++        } else {  // pin node
++            TryDominating(node);
++        }
++        delete forDelete;
++        AddAnOuterNode(node);
+     }
+-    delete for_delete;
+-    AddAnOuterNode(node);
+-  }
+ 
+-  // connet the remaining outer_nodes to the source
+-  tree.source = make_shared<TreeNode>(net.source());
+-  for (const auto& on : outer_nodes)
+-    TreeNode::setParent(on.second.cur, tree.source);
+-  tree.net = &net;
++    // connet the remaining outerNodes to the source
++    tree.source = make_shared<TreeNode>(net.source());
++    for (const auto& on : outerNodes) TreeNode::SetParent(on.second.cur, tree.source);
++    tree.net = &net;
+ 
+-  // shift all pins back
+-  for (auto& p : net.pins)
+-    p->loc += ori_src_loc;
+-  tree.preOrder([&](const shared_ptr<TreeNode>& node) { node->loc += ori_src_loc; });
++    // shift all pins back
++    for (auto& p : net.pins) p->loc += oriSrcLoc;
++    tree.PreOrder([&](const shared_ptr<TreeNode>& node) { node->loc += oriSrcLoc; });
+ 
+-  // clear
+-  for (auto in : inner_nodes)
+-    delete in;
+-  inner_nodes.clear();
+-  outer_nodes.clear();
++    // clear
++    for (auto in : innerNodes) delete in;
++    innerNodes.clear();
++    outerNodes.clear();
+ }
+ 
+-map<double, OuterNode>::iterator RsaBuilder::NextOuterNode(const map<double, OuterNode>::iterator& it)
+-{
+-  auto res = next(it);
+-  if (res != outer_nodes.end())
+-    return res;
+-  else
+-    return outer_nodes.begin();
++map<double, OuterNode>::iterator RsaBuilder::NextOuterNode(const map<double, OuterNode>::iterator& it) {
++    auto res = next(it);
++    if (res != outerNodes.end())
++        return res;
++    else
++        return outerNodes.begin();
+ }
+ 
+-map<double, OuterNode>::iterator RsaBuilder::PrevOuterNode(const map<double, OuterNode>::iterator& it)
+-{
+-  if (it != outer_nodes.begin())
+-    return prev(it);
+-  else
+-    return prev(outer_nodes.end());
++map<double, OuterNode>::iterator RsaBuilder::PrevOuterNode(const map<double, OuterNode>::iterator& it) {
++    if (it != outerNodes.begin())
++        return prev(it);
++    else
++        return prev(outerNodes.end());
+ }
+ 
+-bool RsaBuilder::TryMaxOvlpSteinerNode(OuterNode& left, OuterNode& right)
+-{
+-  double rl_ang = atan2(right.cur->loc.y, right.cur->loc.x) - atan2(left.cur->loc.y, left.cur->loc.x);
+-  // if (rl_ang>-kPI && rl_ang<0) return false; // there is smaller arc
+-  DTYPE new_x, new_y;
+-  if ((rl_ang > -kPI && rl_ang < 0) || rl_ang > kPI) {  // large arc
+-    new_x = 0;
+-    new_y = 0;
+-  } else {
+-    new_x = MaxOvlp(left.cur->loc.x, right.cur->loc.x);
+-    new_y = MaxOvlp(left.cur->loc.y, right.cur->loc.y);
+-  }
+-  // if (new_x==0 && new_y==0) return false; // non-neighboring quadrant
+-  auto tn = make_shared<TreeNode>(new_x, new_y);
+-  tn->children = {left.cur, right.cur};
+-  auto in = new InnerNode(tn);
+-  left.right_parent = in;
+-  right.left_parent = in;
+-  inner_nodes.insert(in);
+-  // cout << "add a tmp steiner point" << endl;
+-  // tn->Print(0,true);
+-  return true;
++bool RsaBuilder::TryMaxOvlpSteinerNode(OuterNode& left, OuterNode& right) {
++    double rlAng = atan2(right.cur->loc.y, right.cur->loc.x) - atan2(left.cur->loc.y, left.cur->loc.x);
++    // if (rlAng>-PI_VALUE && rlAng<0) return false; // there is smaller arc
++    DTYPE newX, newY;
++    if ((rlAng > -PI_VALUE && rlAng < 0) || rlAng > PI_VALUE) {  // large arc
++        newX = 0;
++        newY = 0;
++    } else {
++        newX = MaxOvlp(left.cur->loc.x, right.cur->loc.x);
++        newY = MaxOvlp(left.cur->loc.y, right.cur->loc.y);
++    }
++    // if (newX==0 && newY==0) return false; // non-neighboring quadrant
++    auto tn = make_shared<TreeNode>(newX, newY);
++    tn->children = {left.cur, right.cur};
++    auto in = new InnerNode(tn);
++    left.rightP = in;
++    right.leftP = in;
++    innerNodes.insert(in);
++    // cout << "add a tmp steiner point" << endl;
++    // tn->Print(0,true);
++    return true;
+ }
+ 
+-void RsaBuilder::RemoveAnOuterNode(const shared_ptr<TreeNode>& node, bool del_left, bool del_right)
+-{
+-  auto outer_cur = outer_nodes.find(OuterNodeKey(node));
+-  assert(outer_cur != outer_nodes.end());
+-  InnerNode *inner_left = outer_cur->second.left_parent, *inner_right = outer_cur->second.right_parent;
+-  auto outer_left = outer_nodes.end(), outer_right = outer_nodes.end();
+-  if (inner_left != nullptr) {
+-    outer_left = PrevOuterNode(outer_cur);
+-    assert(outer_left->second.cur == inner_left->tn->children[0]);
+-    assert(outer_cur->second.cur == inner_left->tn->children[1]);
+-    inner_nodes.erase(inner_left);
+-    if (del_left)
+-      delete inner_left;  // inner parent become invalid now
+-    outer_left->second.right_parent = nullptr;
+-  }
+-  if (inner_right != nullptr) {
+-    outer_right = NextOuterNode(outer_cur);
+-    assert(outer_cur->second.cur == inner_right->tn->children[0]);
+-    assert(outer_right->second.cur == inner_right->tn->children[1]);
+-    inner_nodes.erase(inner_right);
+-    if (del_right)
+-      delete inner_right;  // inner parent become invalid now
+-    outer_right->second.left_parent = nullptr;
+-  }
+-  // delete outer_cur->second.first; //  outer child should be kept
+-  outer_nodes.erase(outer_cur);
+-  if (del_left && del_right && outer_right != outer_nodes.end() && outer_left != outer_nodes.end() && outer_left != outer_right) {
+-    TryMaxOvlpSteinerNode(outer_left->second, outer_right->second);
+-  }
++void RsaBuilder::RemoveAnOuterNode(const shared_ptr<TreeNode>& node, bool delL, bool delR) {
++    auto outerCur = outerNodes.find(OuterNodeKey(node));
++    assert(outerCur != outerNodes.end());
++    InnerNode *innerL = outerCur->second.leftP, *innerR = outerCur->second.rightP;
++    auto outerL = outerNodes.end(), outerR = outerNodes.end();
++    if (innerL != nullptr) {
++        outerL = PrevOuterNode(outerCur);
++        assert(outerL->second.cur == innerL->tn->children[0]);
++        assert(outerCur->second.cur == innerL->tn->children[1]);
++        innerNodes.erase(innerL);
++        if (delL) delete innerL;  // inner parent become invalid now
++        outerL->second.rightP = nullptr;
++    }
++    if (innerR != nullptr) {
++        outerR = NextOuterNode(outerCur);
++        assert(outerCur->second.cur == innerR->tn->children[0]);
++        assert(outerR->second.cur == innerR->tn->children[1]);
++        innerNodes.erase(innerR);
++        if (delR) delete innerR;  // inner parent become invalid now
++        outerR->second.leftP = nullptr;
++    }
++    // delete outerCur->second.first; //  outer child should be kept
++    outerNodes.erase(outerCur);
++    if (delL && delR && outerR != outerNodes.end() && outerL != outerNodes.end() && outerL != outerR) {
++        TryMaxOvlpSteinerNode(outerL->second, outerR->second);
++    }
+ }
+ 
+ // p dominates c
+-inline bool Dominate(const Point& p, const Point& c)
+-{
+-  return ((p.x >= 0 && c.x >= 0 && p.x <= c.x) || (p.x <= 0 && c.x <= 0 && p.x >= c.x))      // x
+-         && ((p.y >= 0 && c.y >= 0 && p.y <= c.y) || (p.y <= 0 && c.y <= 0 && p.y >= c.y));  // y
++inline bool Dominate(const Point& p, const Point& c) {
++    return ((p.x >= 0 && c.x >= 0 && p.x <= c.x) || (p.x <= 0 && c.x <= 0 && p.x >= c.x))      // x
++           && ((p.y >= 0 && c.y >= 0 && p.y <= c.y) || (p.y <= 0 && c.y <= 0 && p.y >= c.y));  // y
+ }
+ 
+-bool RsaBuilder::TryDominatingOneSide(OuterNode& p, OuterNode& c)
+-{
+-  if (!Dominate(p.cur->loc, c.cur->loc))
+-    return false;
+-  TreeNode::setParent(c.cur, p.cur);
+-  RemoveAnOuterNode(c.cur);
+-  return true;
++bool RsaBuilder::TryDominatingOneSide(OuterNode& p, OuterNode& c) {
++    if (!Dominate(p.cur->loc, c.cur->loc)) return false;
++    TreeNode::SetParent(c.cur, p.cur);
++    RemoveAnOuterNode(c.cur);
++    return true;
+ }
+ 
+-void RsaBuilder::TryDominating(const shared_ptr<TreeNode>& node)
+-{
+-  OuterNode outer_cur(node);
+-  if (outer_nodes.empty())
+-    return;
+-  else if (outer_nodes.size() == 1) {
+-    TryDominatingOneSide(outer_cur, outer_nodes.begin()->second);
+-    return;
+-  }
+-  // get outer_right & outer_left
+-  auto outer_right = outer_nodes.upper_bound(OuterNodeKey(node));
+-  if (outer_right == outer_nodes.end())
+-    outer_right = outer_nodes.begin();
+-  auto outer_left = PrevOuterNode(outer_right);
+-  assert(outer_left != outer_nodes.end() && outer_right != outer_nodes.end());
+-  assert(outer_left->second.right_parent == outer_right->second.left_parent);
+-  // try dominating twice
+-  TryDominatingOneSide(outer_cur, outer_left->second);
+-  TryDominatingOneSide(outer_cur, outer_right->second);
++void RsaBuilder::TryDominating(const shared_ptr<TreeNode>& node) {
++    OuterNode outerCur(node);
++    if (outerNodes.empty())
++        return;
++    else if (outerNodes.size() == 1) {
++        TryDominatingOneSide(outerCur, outerNodes.begin()->second);
++        return;
++    }
++    // get outerR & outerL
++    auto outerR = outerNodes.upper_bound(OuterNodeKey(node));
++    if (outerR == outerNodes.end()) outerR = outerNodes.begin();
++    auto outerL = PrevOuterNode(outerR);
++    assert(outerL != outerNodes.end() && outerR != outerNodes.end());
++    assert(outerL->second.rightP == outerR->second.leftP);
++    // try dominating twice
++    TryDominatingOneSide(outerCur, outerL->second);
++    TryDominatingOneSide(outerCur, outerR->second);
+ }
+ 
+ // suppose no case of [node = min(node, an outer node)]
+-void RsaBuilder::AddAnOuterNode(const shared_ptr<TreeNode>& node)
+-{
+-  OuterNode outer_cur(node);
+-  if (!outer_nodes.empty()) {
+-    // get outer_right & outer_left
+-    auto outer_right = outer_nodes.upper_bound(OuterNodeKey(node));
+-    if (outer_right == outer_nodes.end())
+-      outer_right = outer_nodes.begin();
+-    auto outer_left = PrevOuterNode(outer_right);
+-    assert(outer_left != outer_nodes.end() && outer_right != outer_nodes.end());
+-    assert(outer_left->second.right_parent == outer_right->second.left_parent);
+-    // delete parent(outer_right, outer_left)
+-    if (outer_left->second.right_parent) {
+-      inner_nodes.erase(outer_left->second.right_parent);
+-      delete outer_left->second.right_parent;  // inner parent become invalid now
++void RsaBuilder::AddAnOuterNode(const shared_ptr<TreeNode>& node) {
++    OuterNode outerCur(node);
++    if (!outerNodes.empty()) {
++        // get outerR & outerL
++        auto outerR = outerNodes.upper_bound(OuterNodeKey(node));
++        if (outerR == outerNodes.end()) outerR = outerNodes.begin();
++        auto outerL = PrevOuterNode(outerR);
++        assert(outerL != outerNodes.end() && outerR != outerNodes.end());
++        assert(outerL->second.rightP == outerR->second.leftP);
++        // delete parent(outerR, outerL)
++        if (outerL->second.rightP) {
++            innerNodes.erase(outerL->second.rightP);
++            delete outerL->second.rightP;  // inner parent become invalid now
++        }
++        // add two parents
++        TryMaxOvlpSteinerNode(outerL->second, outerCur);
++        TryMaxOvlpSteinerNode(outerCur, outerR->second);
+     }
+-    // add two parents
+-    TryMaxOvlpSteinerNode(outer_left->second, outer_cur);
+-    TryMaxOvlpSteinerNode(outer_cur, outer_right->second);
+-  }
+-  outer_nodes.insert({OuterNodeKey(node), outer_cur});
++    outerNodes.insert({OuterNodeKey(node), outerCur});
+ }
+ 
+-void RsaBuilder::PrintInnerNodes()
+-{
+-  cout << "Inner nodes (# = " << inner_nodes.size() << ")" << endl;
+-  for (auto in : inner_nodes) {
+-    cout << in->tn;
+-  }
++void RsaBuilder::PrintInnerNodes() {
++    cout << "Inner nodes (# = " << innerNodes.size() << ")" << endl;
++    for (auto in : innerNodes) {
++        cout << in->tn;
++    }
+ }
+ 
+-void RsaBuilder::PrintOuterNodes()
+-{
+-  cout << "Outer nodes (# = " << outer_nodes.size() << ")" << endl;
+-  for (auto on : outer_nodes) {
+-    cout << on.second.cur;
+-  }
++void RsaBuilder::PrintOuterNodes() {
++    cout << "Outer nodes (# = " << outerNodes.size() << ")" << endl;
++    for (auto on : outerNodes) {
++        cout << on.second.cur;
++    }
+ }
+ 
+ }  // namespace salt
+\ No newline at end of file
+diff --git a/src/third_party/salt/base/rsa.h b/src/third_party/salt/base/rsa.h
+index 172829fa..2266ae0a 100644
+--- a/src/third_party/salt/base/rsa.h
++++ b/src/third_party/salt/base/rsa.h
+@@ -1,91 +1,85 @@
+ #pragma once
+ 
++#include "tree.h"
++
+ #include <cmath>
+ #include <map>
+ #include <set>
+ 
+-#include "tree.h"
+-
+ namespace salt {
+ 
+-class RSABase
+-{
+- public:
+-  void ReplaceRootChildren(Tree& tree);
+-  virtual void Run(const Net& net, Tree& tree) = 0;
++class RsaBase {
++public:
++    void ReplaceRootChildren(Tree& tree);
++    virtual void Run(const Net& net, Tree& tree) = 0;
+ 
+- protected:
+-  DTYPE MaxOvlp(DTYPE z1, DTYPE z2);
++protected:
++    DTYPE MaxOvlp(DTYPE z1, DTYPE z2);
+ };
+ 
+ // Inner Node: an inner node alway has two child (outer) nodes
+ // tn->children[0]: smaller angle, clockwise, left
+ // tn->children[1]: larger angle, counter clockwise, right
+-class InnerNode
+-{
+- public:
+-  unsigned id;
+-  shared_ptr<TreeNode> tn;
+-  DTYPE dist;
+-  double angle;  // [-pi, pi]
+-  InnerNode(const shared_ptr<TreeNode>& treeNode) : tn(treeNode), dist(abs(tn->loc.x) + abs(tn->loc.y)), angle(atan2(tn->loc.y, tn->loc.x))
+-  {
+-    static unsigned gid = 0;
+-    id = gid++;
+-  }  // use id instead of pointer to make it deterministic
++class InnerNode {
++public:
++    unsigned id;
++    shared_ptr<TreeNode> tn;
++    DTYPE dist;
++    double angle;  // [-pi, pi]
++    InnerNode(const shared_ptr<TreeNode>& treeNode)
++        : tn(treeNode), dist(abs(tn->loc.x) + abs(tn->loc.y)), angle(atan2(tn->loc.y, tn->loc.x)) {
++        static unsigned gid = 0;
++        id = gid++;
++    }  // use id instead of pointer to make it deterministic
+ };
+-class CompInnerNode
+-{
+- public:
+-  bool operator()(const InnerNode* a, const InnerNode* b)
+-  {
+-    return a->dist > b->dist ||  // prefer fathest one
+-           (a->dist == b->dist
+-            && (a->angle > b->angle ||                      // prefer single direction
+-                (a->angle == b->angle && a->id > b->id)));  // distinguish two nodes with same loc (not touched normally)
+-  }
++class CompInnerNode {
++public:
++    bool operator()(const InnerNode* a, const InnerNode* b) {
++        return a->dist > b->dist ||                            // prefer fathest one
++               (a->dist == b->dist && (a->angle > b->angle ||  // prefer single direction
++                                       (a->angle == b->angle &&
++                                        a->id > b->id)));  // distinguish two nodes with same loc (not touched normally)
++    }
+ };
+ 
+ // Outer Node: an outer node has one or two parent (inner) nodes
+-class OuterNode
+-{
+- public:
+-  shared_ptr<TreeNode> cur;               // itself
+-  InnerNode *left_parent, *right_parent;  // left parent, right parent
+-  OuterNode(const shared_ptr<TreeNode>& c, InnerNode* l = nullptr, InnerNode* r = nullptr) : cur(c), left_parent(l), right_parent(r) {}
++class OuterNode {
++public:
++    shared_ptr<TreeNode> cur;   // itself
++    InnerNode *leftP, *rightP;  // left parent, right parent
++    OuterNode(const shared_ptr<TreeNode>& c, InnerNode* l = nullptr, InnerNode* r = nullptr) : cur(c), leftP(l), rightP(r) {}
+ };
+ 
+ // RSA Builder
+-class RsaBuilder : public RSABase
+-{
+- public:
+-  void Run(const Net& net, Tree& tree);
++class RsaBuilder : public RsaBase {
++public:
++    void Run(const Net& net, Tree& tree);
+ 
+- private:
+-  // inner nodes
+-  set<InnerNode*, CompInnerNode> inner_nodes;
++private:
++    // inner nodes
++    set<InnerNode*, CompInnerNode> innerNodes;
+ 
+-  // outer nodes
+-  map<double, OuterNode> outer_nodes;
+-  // the unique key is always guaranteed, better for query/find by key
+-  inline double OuterNodeKey(const shared_ptr<TreeNode>& tn) { return atan2(tn->loc.y, tn->loc.x); }
+-  // larger angle, counter clockwise, right
+-  map<double, OuterNode>::iterator NextOuterNode(const map<double, OuterNode>::iterator& it);
+-  // smaller angle, clockwise, left
+-  map<double, OuterNode>::iterator PrevOuterNode(const map<double, OuterNode>::iterator& it);
++    // outer nodes
++    map<double, OuterNode> outerNodes;
++    // the unique key is always guaranteed, better for query/find by key
++    inline double OuterNodeKey(const shared_ptr<TreeNode>& tn) { return atan2(tn->loc.y, tn->loc.x); }
++    // larger angle, counter clockwise, right
++    map<double, OuterNode>::iterator NextOuterNode(const map<double, OuterNode>::iterator& it);
++    // smaller angle, clockwise, left
++    map<double, OuterNode>::iterator PrevOuterNode(const map<double, OuterNode>::iterator& it);
+ 
+-  // remove an outer node
+-  bool TryMaxOvlpSteinerNode(OuterNode& left, OuterNode& right);  // maximize the overlapping
+-  void RemoveAnOuterNode(const shared_ptr<TreeNode>& node, bool del_left = true, bool del_right = true);
++    // remove an outer node
++    bool TryMaxOvlpSteinerNode(OuterNode& left, OuterNode& right);  // maximize the overlapping
++    void RemoveAnOuterNode(const shared_ptr<TreeNode>& node, bool delL = true, bool delR = true);
+ 
+-  // add an outer node
+-  bool TryDominatingOneSide(OuterNode& p, OuterNode& c);
+-  void TryDominating(const shared_ptr<TreeNode>& node);
+-  void AddAnOuterNode(const shared_ptr<TreeNode>& node);
++    // add an outer node
++    bool TryDominatingOneSide(OuterNode& p, OuterNode& c);
++    void TryDominating(const shared_ptr<TreeNode>& node);
++    void AddAnOuterNode(const shared_ptr<TreeNode>& node);
+ 
+-  // for debug
+-  void PrintInnerNodes();
+-  void PrintOuterNodes();
++    // for debug
++    void PrintInnerNodes();
++    void PrintOuterNodes();
+ };
+ 
+ }  // namespace salt
+\ No newline at end of file
+diff --git a/src/third_party/salt/base/tree.cpp b/src/third_party/salt/base/tree.cpp
+index a8648297..0fa5f8a3 100644
+--- a/src/third_party/salt/base/tree.cpp
++++ b/src/third_party/salt/base/tree.cpp
+@@ -6,349 +6,310 @@
+ 
+ namespace salt {
+ 
+-void TreeNode::PrintSingle(ostream& os) const
+-{
+-  os << "Node " << id << ": " << loc << (pin ? ", pin" : "") << ", " << children.size() << " children";
++void TreeNode::PrintSingle(ostream& os) const {
++    os << "Node " << id << ": " << loc << (pin ? ", pin" : "") << ", " << children.size() << " children";
+ }
+ 
+-void TreeNode::PrintRecursiveHelp(ostream& os, vector<bool>& prefix) const
+-{
+-  for (auto pre : prefix)
+-    os << (pre ? "  |" : "   ");
+-  if (!prefix.empty())
+-    os << "-> ";
+-  PrintSingle(os);
+-  os << endl;
+-  if (children.size() > 0) {
+-    prefix.push_back(true);
+-    for (size_t i = 0; i < children.size() - 1; ++i) {
+-      if (children[i])
+-        children[i]->PrintRecursiveHelp(os, prefix);
+-      else
+-        os << "<null>" << endl;
++void TreeNode::PrintRecursiveHelp(ostream& os, vector<bool>& prefix) const {
++    for (auto pre : prefix) os << (pre ? "  |" : "   ");
++    if (!prefix.empty()) os << "-> ";
++    PrintSingle(os);
++    os << endl;
++    if (children.size() > 0) {
++        prefix.push_back(true);
++        for (size_t i = 0; i < children.size() - 1; ++i) {
++            if (children[i])
++                children[i]->PrintRecursiveHelp(os, prefix);
++            else
++                os << "<null>" << endl;
++        }
++        prefix.back() = false;
++        children.back()->PrintRecursiveHelp(os, prefix);
++        prefix.pop_back();
+     }
+-    prefix.back() = false;
+-    children.back()->PrintRecursiveHelp(os, prefix);
+-    prefix.pop_back();
+-  }
+ }
+ 
+-void TreeNode::PrintRecursive(ostream& os) const
+-{
+-  vector<bool> prefix;  // prefix indicates whether an ancestor is a last child or not
+-  PrintRecursiveHelp(os, prefix);
++void TreeNode::PrintRecursive(ostream& os) const {
++    vector<bool> prefix;  // prefix indicates whether an ancestor is a last child or not
++    PrintRecursiveHelp(os, prefix);
+ }
+ 
+-void TreeNode::setParent(const shared_ptr<TreeNode>& childNode, const shared_ptr<TreeNode>& parentNode)
+-{
+-  childNode->parent = parentNode;
+-  parentNode->children.push_back(childNode);
++void TreeNode::SetParent(const shared_ptr<TreeNode>& childNode, const shared_ptr<TreeNode>& parentNode) {
++    childNode->parent = parentNode;
++    parentNode->children.push_back(childNode);
+ }
+ 
+-void TreeNode::resetParent(const shared_ptr<TreeNode>& node)
+-{
+-  assert(node->parent);
++void TreeNode::ResetParent(const shared_ptr<TreeNode>& node) {
++    assert(node->parent);
+ 
+-  auto& n = node->parent->children;
+-  auto it = find(n.begin(), n.end(), node);
+-  assert(it != n.end());
+-  *it = n.back();
+-  n.pop_back();
++    auto& n = node->parent->children;
++    auto it = find(n.begin(), n.end(), node);
++    assert(it != n.end());
++    *it = n.back();
++    n.pop_back();
+ 
+-  node->parent.reset();
++    node->parent.reset();
+ }
+ 
+-void TreeNode::reroot(const shared_ptr<TreeNode>& node)
+-{
+-  if (node->parent) {
+-    reroot(node->parent);
+-    auto old_parent = node->parent;
+-    TreeNode::resetParent(node);
+-    TreeNode::setParent(old_parent, node);
+-  }
++void TreeNode::Reroot(const shared_ptr<TreeNode>& node) {
++    if (node->parent) {
++        Reroot(node->parent);
++        auto oldParent = node->parent;
++        TreeNode::ResetParent(node);
++        TreeNode::SetParent(oldParent, node);
++    }
+ }
+ 
+-bool TreeNode::isAncestor(const shared_ptr<TreeNode>& ancestor, const shared_ptr<TreeNode>& descendant)
+-{
+-  auto tmp = descendant;
+-  do {
+-    if (tmp == ancestor) {
+-      return true;
+-    }
+-    tmp = tmp->parent;
+-  } while (tmp);
+-  return false;
++bool TreeNode::IsAncestor(const shared_ptr<TreeNode>& ancestor, const shared_ptr<TreeNode>& descendant) {
++    auto tmp = descendant;
++    do {
++        if (tmp == ancestor) {
++            return true;
++        }
++        tmp = tmp->parent;
++    } while (tmp);
++    return false;
+ }
+ 
+-void TreeNode::preOrder(const shared_ptr<TreeNode>& node, const function<void(const shared_ptr<TreeNode>&)>& visit)
+-{
+-  visit(node);
+-  for (auto c : node->children)
+-    preOrder(c, visit);
++void TreeNode::PreOrder(const shared_ptr<TreeNode>& node, const function<void(const shared_ptr<TreeNode>&)>& visit) {
++    visit(node);
++    for (auto c : node->children) PreOrder(c, visit);
+ }
+ 
+-void TreeNode::postOrder(const shared_ptr<TreeNode>& node, const function<void(const shared_ptr<TreeNode>&)>& visit)
+-{
+-  for (auto c : node->children)
+-    postOrder(c, visit);
+-  visit(node);
++void TreeNode::PostOrder(const shared_ptr<TreeNode>& node, const function<void(const shared_ptr<TreeNode>&)>& visit) {
++    for (auto c : node->children) PostOrder(c, visit);
++    visit(node);
+ }
+ 
+-void TreeNode::postOrderCopy(const shared_ptr<TreeNode>& node, const function<void(const shared_ptr<TreeNode>&)>& visit)
+-{
+-  auto tmp = node->children;
+-  for (auto c : tmp)
+-    postOrderCopy(c, visit);
+-  visit(node);
++void TreeNode::PostOrderCopy(const shared_ptr<TreeNode>& node, const function<void(const shared_ptr<TreeNode>&)>& visit) {
++    auto tmp = node->children;
++    for (auto c : tmp) PostOrderCopy(c, visit);
++    visit(node);
+ }
+ 
+-void Tree::Reset(bool freeTreeNodes)
+-{
+-  if (freeTreeNodes) {
+-    postOrder([](const shared_ptr<TreeNode>& node) { node->children.clear(); });
+-  }
+-  source.reset();
+-  net = nullptr;
++void Tree::Reset(bool freeTreeNodes) {
++    if (freeTreeNodes) {
++        PostOrder([](const shared_ptr<TreeNode>& node) { node->children.clear(); });
++    }
++    source.reset();
++    net = nullptr;
+ }
+ 
+-void Tree::Read(istream& is)
+-{
+-  Net* p_net = new Net;
+-
+-  // header
+-  string buf, option;
+-  int num_pin = 0;
+-  while (is >> buf && buf != "Tree")
+-    ;
+-  assert(buf == "Tree");
+-  getline(is, buf);
+-  istringstream iss(buf);
+-  iss >> p_net->id >> p_net->name >> num_pin >> option;
+-  assert(num_pin > 0);
+-  p_net->with_cap = (option == "-cap");
+-
+-  // pins
+-  int i, parent_idx;
+-  DTYPE x, y;
+-  double c = 0.0;
+-  p_net->pins.resize(num_pin);
+-  vector<int> parent_idxs;
+-  vector<shared_ptr<TreeNode>> tree_nodes;
+-  for (auto& pin : p_net->pins) {
+-    is >> i >> x >> y >> parent_idx;
+-    assert(i == tree_nodes.size());
+-    if (p_net->with_cap)
+-      is >> c;
+-    pin = make_shared<Pin>(x, y, i, c);
+-    tree_nodes.push_back(make_shared<TreeNode>(x, y, pin, i));
+-    parent_idxs.push_back(parent_idx);
+-  }
+-  assert(tree_nodes.size() == num_pin);
+-
+-  // non-pin nodes
+-  getline(is, buf);  // consume eol
+-  streampos pos;
+-  while (true) {
+-    pos = is.tellg();
++void Tree::Read(istream& is) {
++    Net* pNet = new Net;
++
++    // header
++    string buf, option;
++    int numPin = 0;
++    while (is >> buf && buf != "Tree")
++        ;
++    assert(buf == "Tree");
+     getline(is, buf);
+-    istringstream iss2(buf);
+-    iss2 >> i >> x >> y >> parent_idx;
+-    if (iss2.fail())
+-      break;
+-    assert(i == tree_nodes.size());
+-    tree_nodes.push_back(make_shared<TreeNode>(x, y, nullptr, i));
+-    parent_idxs.push_back(parent_idx);
+-  }
+-  is.seekg(pos);  // go back
+-
+-  // parents
+-  for (unsigned i = 0; i < tree_nodes.size(); ++i) {
+-    parent_idx = parent_idxs[i];
+-    if (parent_idx >= 0) {
+-      assert(parent_idx < tree_nodes.size());
+-      salt::TreeNode::setParent(tree_nodes[i], tree_nodes[parent_idx]);
+-    } else {
+-      assert(parent_idx == -1);
+-      source = tree_nodes[i];
++    istringstream iss(buf);
++    iss >> pNet->id >> pNet->name >> numPin >> option;
++    assert(numPin > 0);
++    pNet->withCap = (option == "-cap");
++
++    // pins
++    int i, parentIdx;
++    DTYPE x, y;
++    double c = 0.0;
++    pNet->pins.resize(numPin);
++    vector<int> parentIdxs;
++    vector<shared_ptr<TreeNode>> treeNodes;
++    for (auto& pin : pNet->pins) {
++        is >> i >> x >> y >> parentIdx;
++        assert(i == treeNodes.size());
++        if (pNet->withCap) is >> c;
++        pin = make_shared<Pin>(x, y, i, c);
++        treeNodes.push_back(make_shared<TreeNode>(x, y, pin, i));
++        parentIdxs.push_back(parentIdx);
++    }
++    assert(treeNodes.size() == numPin);
++
++    // non-pin nodes
++    getline(is, buf);  // consume eol
++    streampos pos;
++    while (true) {
++        pos = is.tellg();
++        getline(is, buf);
++        istringstream iss2(buf);
++        iss2 >> i >> x >> y >> parentIdx;
++        if (iss2.fail()) break;
++        assert(i == treeNodes.size());
++        treeNodes.push_back(make_shared<TreeNode>(x, y, nullptr, i));
++        parentIdxs.push_back(parentIdx);
++    }
++    is.seekg(pos);  // go back
++
++    // parents
++    for (unsigned i = 0; i < treeNodes.size(); ++i) {
++        parentIdx = parentIdxs[i];
++        if (parentIdx >= 0) {
++            assert(parentIdx < treeNodes.size());
++            salt::TreeNode::SetParent(treeNodes[i], treeNodes[parentIdx]);
++        } else {
++            assert(parentIdx == -1);
++            source = treeNodes[i];
++        }
+     }
+-  }
+ 
+-  net = p_net;
+-  // TODO: check dangling nodes
++    net = pNet;
++    // TODO: check dangling nodes
+ }
+ 
+-void Tree::Read(const string& file_name)
+-{
+-  ifstream is(file_name);
+-  if (is.fail()) {
+-    cout << "ERROR: Cannot open file " << file_name << endl;
+-    exit(1);
+-  }
+-  Read(is);
++void Tree::Read(const string& fileName) {
++    ifstream is(fileName);
++    if (is.fail()) {
++        cout << "ERROR: Cannot open file " << fileName << endl;
++        exit(1);
++    }
++    Read(is);
+ }
+ 
+-void Tree::Write(ostream& os)
+-{
+-  // header
+-  os << "Tree " << net->GetHeader() << endl;
+-
+-  // nodes
+-  // Note: source pin may not be covered in some intermediate state
+-  int num_nodes = UpdateId();
+-  auto nodes = ObtainNodes();
+-  vector<shared_ptr<TreeNode>> sorted_nodes(num_nodes, nullptr);  // bucket sort
+-  for (auto node : nodes) {
+-    sorted_nodes[node->id] = node;
+-  }
+-  for (auto node : sorted_nodes) {
+-    if (!node)
+-      continue;
+-    int parentId = node->parent ? node->parent->id : -1;
+-    os << node->id << " " << node->loc.x << " " << node->loc.y << " " << parentId;
+-    if (net->with_cap && node->pin)
+-      os << " " << node->pin->cap;
+-    os << endl;
+-  }
++void Tree::Write(ostream& os) {
++    // header
++    os << "Tree " << net->GetHeader() << endl;
++
++    // nodes
++    // Note: source pin may not be covered in some intermediate state
++    int numNodes = UpdateId();
++    auto nodes = ObtainNodes();
++    vector<shared_ptr<TreeNode>> sortedNodes(numNodes, nullptr);  // bucket sort
++    for (auto node : nodes) {
++        sortedNodes[node->id] = node;
++    }
++    for (auto node : sortedNodes) {
++        if (!node) continue;
++        int parentId = node->parent ? node->parent->id : -1;
++        os << node->id << " " << node->loc.x << " " << node->loc.y << " " << parentId;
++        if (net->withCap && node->pin) os << " " << node->pin->cap;
++        os << endl;
++    }
+ }
+ 
+-void Tree::Write(const string& prefix, bool with_net_info)
+-{
+-  ofstream ofs(prefix + (with_net_info ? ("_" + net->name) : "") + ".tree");
+-  Write(ofs);
+-  ofs.close();
++void Tree::Write(const string& prefix, bool withNetInfo) {
++    ofstream ofs(prefix + (withNetInfo ? ("_" + net->name) : "") + ".tree");
++    Write(ofs);
++    ofs.close();
+ }
+ 
+-void Tree::Print(ostream& os) const
+-{
+-  os << "Tree ";
+-  if (net)
+-    os << net->id << ": #pins=" << net->pins.size() << endl;
+-  else
+-    os << "<no_net_associated>" << endl;
+-  if (source)
+-    source->PrintRecursive(os);
+-  else
+-    os << "<null>" << endl;
++void Tree::Print(ostream& os) const {
++    os << "Tree ";
++    if (net)
++        os << net->id << ": #pins=" << net->pins.size() << endl;
++    else
++        os << "<no_net_associated>" << endl;
++    if (source)
++        source->PrintRecursive(os);
++    else
++        os << "<null>" << endl;
+ }
+ 
+-int Tree::UpdateId()
+-{
+-  int num_node = net->pins.size();
+-  preOrder([&](const shared_ptr<TreeNode>& node) {
+-    if (node->pin) {
+-      assert(node->pin->id < net->pins.size());
+-      node->id = node->pin->id;
+-    } else
+-      node->id = num_node++;
+-  });
+-  return num_node;
++int Tree::UpdateId() {
++    int numNode = net->pins.size();
++    PreOrder([&](const shared_ptr<TreeNode>& node) {
++        if (node->pin) {
++            assert(node->pin->id < net->pins.size());
++            node->id = node->pin->id;
++        } else
++            node->id = numNode++;
++    });
++    return numNode;
+ }
+ 
+-vector<shared_ptr<TreeNode>> Tree::ObtainNodes() const
+-{
+-  vector<shared_ptr<TreeNode>> nodes;
+-  preOrder([&](const shared_ptr<TreeNode>& node) { nodes.push_back(node); });
+-  return nodes;
++vector<shared_ptr<TreeNode>> Tree::ObtainNodes() const {
++    vector<shared_ptr<TreeNode>> nodes;
++    PreOrder([&](const shared_ptr<TreeNode>& node) { nodes.push_back(node); });
++    return nodes;
+ }
+ 
+-void Tree::SetParentFromChildren()
+-{
+-  preOrder([](const shared_ptr<TreeNode>& node) {
+-    for (auto& c : node->children) {
+-      c->parent = node;
+-    }
+-  });
++void Tree::SetParentFromChildren() {
++    PreOrder([](const shared_ptr<TreeNode>& node) {
++        for (auto& c : node->children) {
++            c->parent = node;
++        }
++    });
+ }
+ 
+-void Tree::SetParentFromUndirectedAdjList()
+-{
+-  preOrder([](const shared_ptr<TreeNode>& node) {
+-    for (auto& c : node->children) {
+-      auto& n = c->children;
+-      auto it = find(n.begin(), n.end(), node);
+-      assert(it != n.end());
+-      *it = n.back();
+-      n.pop_back();
+-      c->parent = node;
+-    }
+-  });
++void Tree::SetParentFromUndirectedAdjList() {
++    PreOrder([](const shared_ptr<TreeNode>& node) {
++        for (auto& c : node->children) {
++            auto& n = c->children;
++            auto it = find(n.begin(), n.end(), node);
++            assert(it != n.end());
++            *it = n.back();
++            n.pop_back();
++            c->parent = node;
++        }
++    });
+ }
+ 
+-void Tree::reroot()
+-{
+-  TreeNode::reroot(source);
++void Tree::Reroot() {
++    TreeNode::Reroot(source);
+ }
+ 
+-void Tree::QuickCheck()
+-{
+-  int num_pin = net->pins.size(), num_checked = 0;
+-  vector<bool> pin_exist(num_pin, false);
+-  preOrder([&](const shared_ptr<TreeNode>& node) {
+-    if (!node) {
+-      cerr << "Error: empty node" << endl;
++void Tree::QuickCheck() {
++    int numPin = net->pins.size(), numChecked = 0;
++    vector<bool> pinExist(numPin, false);
++    PreOrder([&](const shared_ptr<TreeNode>& node) {
++        if (!node) {
++            cerr << "Error: empty node" << endl;
++        }
++        if (node->pin) {
++            auto id = node->pin->id;
++            if (!(id >= 0 && id < numPin && pinExist[id] == false)) {
++                cerr << "Error: Steiner node with incorrect id" << endl;
++            }
++            pinExist[id] = true;
++            ++numChecked;
++        }
++        for (auto& c : node->children) {
++            if (!c->parent || c->parent != node) {
++                cerr << "Error: inconsistent parent-child relationship" << endl;
++            }
++        }
++    });
++    if (numChecked != numPin) {
++        cerr << "Error: pin not covered" << endl;
+     }
+-    if (node->pin) {
+-      auto id = node->pin->id;
+-      if (!(id >= 0 && id < num_pin && pin_exist[id] == false)) {
+-        cerr << "Error: Steiner node with incorrect id" << endl;
+-      }
+-      pin_exist[id] = true;
+-      ++num_checked;
+-    }
+-    for (auto& c : node->children) {
+-      if (!c->parent || c->parent != node) {
+-        cerr << "Error: inconsistent parent-child relationship" << endl;
+-      }
+-    }
+-  });
+-  if (num_checked != num_pin) {
+-    cerr << "Error: pin not covered" << endl;
+-  }
+ }
+ 
+-void Tree::RemovePhyRedundantSteiner()
+-{
+-  postOrderCopy([](const shared_ptr<TreeNode>& node) {
+-    if (!node->parent || node->loc != node->parent->loc)
+-      return;
+-    if (node->pin) {
+-      if (node->parent->pin && node->parent->pin != node->pin)
+-        return;
+-      node->parent->pin = node->pin;
+-    }
+-    for (auto c : node->children)
+-      TreeNode::setParent(c, node->parent);
+-    TreeNode::resetParent(node);
+-  });
++void Tree::RemovePhyRedundantSteiner() {
++    PostOrderCopy([](const shared_ptr<TreeNode>& node) {
++        if (!node->parent || node->loc != node->parent->loc) return;
++        if (node->pin) {
++            if (node->parent->pin && node->parent->pin != node->pin) return;
++            node->parent->pin = node->pin;
++        }
++        for (auto c : node->children) TreeNode::SetParent(c, node->parent);
++        TreeNode::ResetParent(node);
++    });
+ }
+ 
+-void Tree::RemoveTopoRedundantSteiner()
+-{
+-  postOrderCopy([](const shared_ptr<TreeNode>& node) {
+-    // degree may change after post-order traversal of its children
+-    if (node->pin)
+-      return;
+-    if (node->children.empty()) {
+-      TreeNode::resetParent(node);
+-    } else if (node->children.size() == 1) {
+-      auto old_parent = node->parent, oldChild = node->children[0];
+-      TreeNode::resetParent(node);
+-      TreeNode::resetParent(oldChild);
+-      TreeNode::setParent(oldChild, old_parent);
+-    }
+-  });
++void Tree::RemoveTopoRedundantSteiner() {
++    PostOrderCopy([](const shared_ptr<TreeNode>& node) {
++        // degree may change after post-order traversal of its children
++        if (node->pin) return;
++        if (node->children.empty()) {
++            TreeNode::ResetParent(node);
++        } else if (node->children.size() == 1) {
++            auto oldParent = node->parent, oldChild = node->children[0];
++            TreeNode::ResetParent(node);
++            TreeNode::ResetParent(oldChild);
++            TreeNode::SetParent(oldChild, oldParent);
++        }
++    });
+ }
+ 
+-void Tree::RemoveEmptyChildren()
+-{
+-  preOrder([](const shared_ptr<TreeNode>& node) {
+-    int size = 0;
+-    for (int i = 0; i < node->children.size(); ++i) {
+-      if (node->children[i])
+-        node->children[size++] = node->children[i];
+-    }
+-    node->children.resize(size);
+-  });
++void Tree::RemoveEmptyChildren() {
++    PreOrder([](const shared_ptr<TreeNode>& node) {
++        int size = 0;
++        for (int i = 0; i < node->children.size(); ++i) {
++            if (node->children[i]) node->children[size++] = node->children[i];
++        }
++        node->children.resize(size);
++    });
+ }
+ 
+ }  // namespace salt
+\ No newline at end of file
+diff --git a/src/third_party/salt/base/tree.h b/src/third_party/salt/base/tree.h
+index 8fde2af2..f66880e7 100644
+--- a/src/third_party/salt/base/tree.h
++++ b/src/third_party/salt/base/tree.h
+@@ -1,132 +1,102 @@
+ #pragma once
+ 
+-#include <functional>
+-
+ #include "net.h"
+ 
++#include <functional>
++
+ namespace salt {
+ 
+-class TreeNode
+-{
+- public:
+-  Point loc;
+-  shared_ptr<Pin> pin;  // nullptr if it is not a pin
+-  int id;
+-  vector<shared_ptr<TreeNode>> children;  // empty for leaf
+-  shared_ptr<TreeNode> parent;            // nullptr for source
+-
+-  // Constructors
+-  TreeNode(const Point& l = Point(), shared_ptr<Pin> p = nullptr, int i = -1) : loc(l), pin(p), id(i) {}
+-  TreeNode(DTYPE x, DTYPE y, shared_ptr<Pin> p = nullptr, int i = -1) : loc(x, y), pin(p), id(i) {}
+-  TreeNode(shared_ptr<Pin> p) : loc(p->loc), pin(p), id(p->id) {}
+-
+-  // Accessors
+-  DTYPE WireToParent() const { return Dist(loc, parent->loc); }
+-  DTYPE WireToParentChecked() const { return parent ? WireToParent() : 0.0; }
+-
+-  // Hunman-readable print
+-  void PrintSingle(ostream& os = cout) const;
+-  void PrintRecursiveHelp(ostream& os, vector<bool>& prefix) const;  // hunman-readable print
+-  void PrintRecursive(ostream& os = cout) const;
+-  friend ostream& operator<<(ostream& os, const TreeNode& node)
+-  {
+-    node.PrintRecursive(os);
+-    return os;
+-  }
+-
+-  // Set/reset/check parent/ancestor
+-  static void setParent(const shared_ptr<TreeNode>& childNode, const shared_ptr<TreeNode>& parentNode);
+-  static void resetParent(const shared_ptr<TreeNode>& node);
+-  static void reroot(const shared_ptr<TreeNode>& node);
+-  static bool isAncestor(const shared_ptr<TreeNode>& ancestor, const shared_ptr<TreeNode>& descendant);
+-
+-  // Traverse
+-  static void preOrder(const shared_ptr<TreeNode>& node, const function<void(const shared_ptr<TreeNode>&)>& visit);
+-  static void postOrder(const shared_ptr<TreeNode>& node, const function<void(const shared_ptr<TreeNode>&)>& visit);
+-  static void postOrderCopy(const shared_ptr<TreeNode>& node, const function<void(const shared_ptr<TreeNode>&)>& visit);
++class TreeNode {
++public:
++    int id;
++    shared_ptr<Pin> pin;  // nullptr if it is not a pin
++    Point loc;
++    vector<shared_ptr<TreeNode>> children;  // empty for leaf
++    shared_ptr<TreeNode> parent;  // nullptr for source
++
++    // Constructors
++    TreeNode(const Point& l = Point(), shared_ptr<Pin> p = nullptr, int i = -1) : loc(l), pin(p), id(i) {}
++    TreeNode(DTYPE x, DTYPE y, shared_ptr<Pin> p = nullptr, int i = -1) : loc(x, y), pin(p), id(i) {}
++    TreeNode(shared_ptr<Pin> p) : loc(p->loc), pin(p), id(p->id) {}
++
++    // Accessors
++    DTYPE WireToParent() const { return Dist(loc, parent->loc); }
++    DTYPE WireToParentChecked() const { return parent ? WireToParent() : 0.0; }
++
++    // Hunman-readable print
++    void PrintSingle(ostream& os = cout) const; 
++    void PrintRecursiveHelp(ostream& os, vector<bool>& prefix) const; // hunman-readable print
++    void PrintRecursive(ostream& os = cout) const; 
++    friend ostream& operator<<(ostream& os, const TreeNode& node) { node.PrintRecursive(os); return os; }
++
++    // Set/reset/check parent/ancestor
++    static void SetParent(const shared_ptr<TreeNode>& childNode, const shared_ptr<TreeNode>& parentNode);
++    static void ResetParent(const shared_ptr<TreeNode>& node);
++    static void Reroot(const shared_ptr<TreeNode>& node);
++    static bool IsAncestor(const shared_ptr<TreeNode>& ancestor, const shared_ptr<TreeNode>& descendant);
++
++    // Traverse
++    static void PreOrder(const shared_ptr<TreeNode>& node, const function<void(const shared_ptr<TreeNode>&)>& visit);
++    static void PostOrder(const shared_ptr<TreeNode>& node, const function<void(const shared_ptr<TreeNode>&)>& visit);
++    static void PostOrderCopy(const shared_ptr<TreeNode>& node, const function<void(const shared_ptr<TreeNode>&)>& visit);
+ };
+ 
+-class Tree
+-{
+- public:
+-  shared_ptr<TreeNode> source;
+-  const Net* net;
+-
+-  // Note: take care when using copy assign operator and copy constructor. use swap().
+-  Tree(const shared_ptr<TreeNode>& sourceNode = nullptr, const Net* associatedNet = nullptr) : source(sourceNode), net(associatedNet) {}
+-  void Reset(bool freeTreeNodes = true);
+-  ~Tree() { Reset(); }
+-
+-  // File read/write
+-  // ------
+-  // Format:
+-  // Tree <net_id> <net_name> <pin_num> [-cap]
+-  // 0 x0 y0 -1 [cap0]
+-  // 1 x1 y1 parent_idx1 [cap1]
+-  // 2 x2 y2 parent_idx2 [cap2]
+-  // ...
+-  // k xk yk parent_idxk
+-  // ...
+-  // ------
+-  // Notes:
+-  // 1. Nodes with indexes [0, pin_num) are pins, others are Steiner
+-  // 2. Steiner nodes have no cap
+-  void Read(istream& is);
+-  void Read(const string& file_name);
+-  void Write(ostream& os);  // TODO: const? but UpdateId
+-  void Write(const string& prefix, bool with_net_info = true);
+-
+-  // Hunman-readable print
+-  void Print(ostream& os = cout) const;
+-  friend ostream& operator<<(ostream& os, const Tree& tree)
+-  {
+-    tree.Print(os);
+-    return os;
+-  }
+-
+-  // Traverse
+-  void preOrder(const function<void(const shared_ptr<TreeNode>&)>& visit)
+-  {
+-    if (source)
+-      TreeNode::preOrder(source, visit);
+-  }
+-  void postOrder(const function<void(const shared_ptr<TreeNode>&)>& visit)
+-  {
+-    if (source)
+-      TreeNode::postOrder(source, visit);
+-  }
+-  void postOrderCopy(const function<void(const shared_ptr<TreeNode>&)>& visit)
+-  {
+-    if (source)
+-      TreeNode::postOrderCopy(source, visit);
+-  }
+-  void preOrder(const function<void(const shared_ptr<TreeNode>&)>& visit) const
+-  {
+-    if (source)
+-      TreeNode::preOrder(source, visit);
+-  }
+-  void postOrder(const function<void(const shared_ptr<TreeNode>&)>& visit) const
+-  {
+-    if (source)
+-      TreeNode::postOrder(source, visit);
+-  }
+-
+-  // Flatten
+-  int UpdateId();  // update node ids to [0, nodeNum), return nodeNum
+-  vector<shared_ptr<TreeNode>> ObtainNodes() const;
+-
+-  // Legalize parent-child relationship
+-  void SetParentFromChildren();
+-  void SetParentFromUndirectedAdjList();
+-  void reroot();
+-  void QuickCheck();  // check parent-child and pin coverage
+-
+-  // Remove redundant Steiner nodes
+-  void RemovePhyRedundantSteiner();   // remove physically redudant ones (i.e., with the same locatoin of a pin)
+-  void RemoveTopoRedundantSteiner();  // remove topologically redudant ones (i.e., with 0/1 children)
+-
+-  // Remove empty children
+-  void RemoveEmptyChildren();
++class Tree {
++public:
++    shared_ptr<TreeNode> source;
++    const Net* net;
++
++    // Note: take care when using copy assign operator and copy constructor. use swap().
++    Tree(const shared_ptr<TreeNode>& sourceNode = nullptr, const Net* associatedNet = nullptr) : source(sourceNode), net(associatedNet) {}
++    void Reset(bool freeTreeNodes = true);
++    ~Tree() { Reset(); }
++
++    // File read/write
++    // ------
++    // Format:
++    // Tree <net_id> <net_name> <pin_num> [-cap]
++    // 0 x0 y0 -1 [cap0]
++    // 1 x1 y1 parent_idx1 [cap1]
++    // 2 x2 y2 parent_idx2 [cap2]
++    // ...
++    // k xk yk parent_idxk
++    // ...
++    // ------
++    // Notes:
++    // 1. Nodes with indexes [0, pin_num) are pins, others are Steiner
++    // 2. Steiner nodes have no cap
++    void Read(istream& is);
++    void Read(const string& fileName);
++    void Write(ostream& os);  // TODO: const? but UpdateId
++    void Write(const string& prefix, bool withNetInfo = true);
++
++    // Hunman-readable print
++    void Print(ostream& os = cout) const;
++    friend ostream& operator<<(ostream& os, const Tree& tree) { tree.Print(os); return os; }
++
++    // Traverse
++    void PreOrder(const function<void(const shared_ptr<TreeNode>&)>& visit) { if (source) TreeNode::PreOrder(source, visit); }
++    void PostOrder(const function<void(const shared_ptr<TreeNode>&)>& visit) { if (source) TreeNode::PostOrder(source, visit); }
++    void PostOrderCopy(const function<void(const shared_ptr<TreeNode>&)>& visit) { if (source) TreeNode::PostOrderCopy(source, visit); }
++    void PreOrder(const function<void(const shared_ptr<TreeNode>&)>& visit) const { if (source) TreeNode::PreOrder(source, visit); }
++    void PostOrder(const function<void(const shared_ptr<TreeNode>&)>& visit) const { if (source) TreeNode::PostOrder(source, visit); }
++
++    // Flatten
++    int UpdateId();  // update node ids to [0, nodeNum), return nodeNum
++    vector<shared_ptr<TreeNode>> ObtainNodes() const;
++
++    // Legalize parent-child relationship
++    void SetParentFromChildren();
++    void SetParentFromUndirectedAdjList();
++    void Reroot();
++    void QuickCheck();  // check parent-child and pin coverage
++
++    // Remove redundant Steiner nodes
++    void RemovePhyRedundantSteiner();   // remove physically redudant ones (i.e., with the same locatoin of a pin)
++    void RemoveTopoRedundantSteiner();  // remove topologically redudant ones (i.e., with 0/1 children)
++
++    // Remove empty children
++    void RemoveEmptyChildren();
+ };
+ 
+ }  // namespace salt
+\ No newline at end of file
+diff --git a/src/third_party/salt/refine/cancel_intersect.cpp b/src/third_party/salt/refine/cancel_intersect.cpp
+index f79b7b0e..1e17da44 100644
+--- a/src/third_party/salt/refine/cancel_intersect.cpp
++++ b/src/third_party/salt/refine/cancel_intersect.cpp
+@@ -96,16 +96,16 @@ void Cancel(array<shared_ptr<TreeNode>, 2> oric) {
+     auto rootN = oric[1 - minD]->parent;
+     shared_ptr<TreeNode> mergeN = nullptr;
+     for (int d = 0; d < 2; ++d) {
+-        TreeNode::resetParent(oric[d]);
++        TreeNode::ResetParent(oric[d]);
+         if (oric[d]->loc == cclosest[d]) mergeN = oric[d];
+     }
+     if (!mergeN) mergeN = make_shared<TreeNode>(cclosest[minD]);
+-    TreeNode::setParent(mergeN, rootN);
++    TreeNode::SetParent(mergeN, rootN);
+     for (int d = 0; d < 2; ++d)
+-        if (oric[d] != mergeN) TreeNode::setParent(oric[d], mergeN);
++        if (oric[d] != mergeN) TreeNode::SetParent(oric[d], mergeN);
+ }
+ 
+-void Refine::cancelIntersect(Tree& tree) {
++void Refine::CancelIntersect(Tree& tree) {
+     bgi::rtree<RNode, bgi::linear<16>, bgi::indexable<RNode>, RNodeComp> rtree;
+     auto nodes = tree.ObtainNodes();
+     for (int i = 0; i < nodes.size(); ++i) {
+diff --git a/src/third_party/salt/refine/flip.cpp b/src/third_party/salt/refine/flip.cpp
+index 5dad3766..fca59b4c 100644
+--- a/src/third_party/salt/refine/flip.cpp
++++ b/src/third_party/salt/refine/flip.cpp
+@@ -27,10 +27,10 @@ void UpdateNode(const shared_ptr<TreeNode> node,       // central node
+                 const vector<array<DTYPE, 2>>& gains,  // the gain of each child
+                 int i,                                 // current child
+                 array<vector<DTYPE>, 4>& segs,         // segments in each direction
+-                DTYPE acc_gain,                         // gain accumulated by now
++                DTYPE accGain,                         // gain accumulated by now
+                 DTYPE& bestGain,                       // best gain
+-                vector<bool>& low_or_up,                 // each child edge is low or up
+-                vector<bool>& best_low_or_up              // each child edge is low or up for best gain
++                vector<bool>& lowOrUp,                 // each child edge is low or up
++                vector<bool>& bestLowOrUp              // each child edge is low or up for best gain
+ ) {
+     if (i == node->children.size()) {  // get to the end of enumeration
+         for (int j = 0; j < 4; ++j) {
+@@ -38,49 +38,49 @@ void UpdateNode(const shared_ptr<TreeNode> node,       // central node
+             DTYPE max = 0;
+             for (auto len : segs[j]) {
+                 if (len > max) {
+-                    acc_gain += max;
++                    accGain += max;
+                     max = len;
+                 } else
+-                    acc_gain += len;
++                    accGain += len;
+             }
+         }
+-        if (acc_gain > bestGain) {
+-            bestGain = acc_gain;
+-            for (auto c : node->children) best_low_or_up[c->id] = low_or_up[c->id];
++        if (accGain > bestGain) {
++            bestGain = accGain;
++            for (auto c : node->children) bestLowOrUp[c->id] = lowOrUp[c->id];
+         }
+     } else if (align[i]) {  // already consider, pass this child
+-        UpdateNode(node, align, gains, i + 1, segs, acc_gain, bestGain, low_or_up, best_low_or_up);
++        UpdateNode(node, align, gains, i + 1, segs, accGain, bestGain, lowOrUp, bestLowOrUp);
+     } else {  // make a branch because this node-child edge can be L/U
+         int dir;
+         DTYPE dist;
+         bool low = true;  // L/U
+         for (int j = 0; j < 2; ++j) {
+             GetDirId(node->children[i]->loc, node->loc, low, dir, dist);
+-            acc_gain += gains[i][j];
++            accGain += gains[i][j];
+             segs[dir].push_back(dist);
+-            low_or_up[node->children[i]->id] = low;
+-            UpdateNode(node, align, gains, i + 1, segs, acc_gain, bestGain, low_or_up, best_low_or_up);
+-            acc_gain -= gains[i][j];
++            lowOrUp[node->children[i]->id] = low;
++            UpdateNode(node, align, gains, i + 1, segs, accGain, bestGain, lowOrUp, bestLowOrUp);
++            accGain -= gains[i][j];
+             segs[dir].pop_back();
+             low = false;  // L/U
+         }
+     }
+ }
+ 
+-void UpdateSubTree(const shared_ptr<TreeNode> node, array<DTYPE, 2>& res, array<vector<bool>, 2>& best_low_or_up) {
++void UpdateSubTree(const shared_ptr<TreeNode> node, array<DTYPE, 2>& res, array<vector<bool>, 2>& bestLowOrUp) {
+     res = {0, 0};  // low, up
+     if (node->children.empty()) return;
+ 
+     // Calc gains of children
+     unsigned nc = node->children.size();
+     vector<array<DTYPE, 2>> gains(nc);
+-    for (unsigned i = 0; i < nc; ++i) UpdateSubTree(node->children[i], gains[i], best_low_or_up);
++    for (unsigned i = 0; i < nc; ++i) UpdateSubTree(node->children[i], gains[i], bestLowOrUp);
+ 
+     // Process aligned children
+     vector<bool> align(nc, false);
+     array<vector<DTYPE>, 4> segs;
+-    DTYPE acc_gain = 0;
+-    vector<bool> low_or_up(best_low_or_up[0].size());
++    DTYPE accGain = 0;
++    vector<bool> lowOrUp(bestLowOrUp[0].size());
+     for (unsigned i = 0; i < nc; ++i) {
+         Point &a = node->children[i]->loc, b = node->loc;
+         if (a.x == b.x || a.y == b.y) {
+@@ -89,7 +89,7 @@ void UpdateSubTree(const shared_ptr<TreeNode> node, array<DTYPE, 2>& res, array<
+             GetDirId(a, node->loc, true, dir, dist);
+             segs[dir].push_back(dist);
+             align[i] = true;  // no need for further processing
+-            acc_gain += gains[i][0];
++            accGain += gains[i][0];
+         }
+     }
+ 
+@@ -101,12 +101,12 @@ void UpdateSubTree(const shared_ptr<TreeNode> node, array<DTYPE, 2>& res, array<
+         for (int j = 0; j < 2; ++j) {
+             GetDirId(node->parent->loc, node->loc, low, dir, dist);
+             segs[dir].push_back(dist);
+-            UpdateNode(node, align, gains, 0, segs, acc_gain, res[j], low_or_up, best_low_or_up[j]);
++            UpdateNode(node, align, gains, 0, segs, accGain, res[j], lowOrUp, bestLowOrUp[j]);
+             segs[dir].pop_back();
+             low = false;  // L/U
+         }
+     } else  // for source node, update res[0] only
+-        UpdateNode(node, align, gains, 0, segs, acc_gain, res[0], low_or_up, best_low_or_up[0]);
++        UpdateNode(node, align, gains, 0, segs, accGain, res[0], lowOrUp, bestLowOrUp[0]);
+ 
+     // cout<<*node->pin<<", low="<<res[0]<<", up="<<res[1]<<endl;
+ }
+@@ -124,16 +124,16 @@ void AddNode(shared_ptr<TreeNode> c1, shared_ptr<TreeNode> c2, shared_ptr<TreeNo
+         if (c1->parent == c2) swap(c1, c2);  // make sure (c1>=c2)
+         assert(c2->parent == c1 && c1->parent == p);
+     }
+-    TreeNode::resetParent(c1);
+-    TreeNode::setParent(c1, steiner);
+-    TreeNode::resetParent(c2);
+-    TreeNode::setParent(c2, steiner);
+-    TreeNode::setParent(steiner, p);
++    TreeNode::ResetParent(c1);
++    TreeNode::SetParent(c1, steiner);
++    TreeNode::ResetParent(c2);
++    TreeNode::SetParent(c2, steiner);
++    TreeNode::SetParent(steiner, p);
+ }
+ 
+-int gDir[4] = {0, 0, 1, 1};  // down, up, left, right
++int dir2xy[4] = {0, 0, 1, 1};  // down, up, left, right
+ 
+-void TraverseAndAddSteiner(const shared_ptr<TreeNode>& node, bool low, array<vector<bool>, 2>& best_low_or_up) {
++void TraverseAndAddSteiner(const shared_ptr<TreeNode>& node, bool low, array<vector<bool>, 2>& bestLowOrUp) {
+     // cout<<node->id<<(low?" low":"  up")<<endl;
+     // node->Print(0,true);
+     if (node->children.empty()) return;
+@@ -141,7 +141,7 @@ void TraverseAndAddSteiner(const shared_ptr<TreeNode>& node, bool low, array<vec
+     // go down first
+     int luid = low ? 0 : 1;
+     auto children_cpy = node->children;  // it may be chagned later
+-    for (auto c : children_cpy) TraverseAndAddSteiner(c, best_low_or_up[luid][c->id], best_low_or_up);
++    for (auto c : children_cpy) TraverseAndAddSteiner(c, bestLowOrUp[luid][c->id], bestLowOrUp);
+ 
+     // get overlap info
+     array<vector<pair<int, shared_ptr<TreeNode>>>, 4> dist2node;  // for four directions
+@@ -153,12 +153,12 @@ void TraverseAndAddSteiner(const shared_ptr<TreeNode>& node, bool low, array<vec
+     }
+     for (auto c : node->children) {
+         if (c->id == -1) continue;
+-        GetDirId(c->loc, node->loc, best_low_or_up[luid][c->id], dir, dist);
++        GetDirId(c->loc, node->loc, bestLowOrUp[luid][c->id], dir, dist);
+         dist2node[dir].emplace_back(dist, c);
+     }
+ 
+     // add steiner point
+-    auto ori_parent = node->parent;
++    auto oriParent = node->parent;
+     for (dir = 0; dir < 4; ++dir) {
+         auto& cands = dist2node[dir];
+         if (cands.size() <= 1) continue;
+@@ -171,7 +171,7 @@ void TraverseAndAddSteiner(const shared_ptr<TreeNode>& node, bool low, array<vec
+ 
+         auto out = cands[0].second;
+         for (int cid = 1; cid < cands.size(); ++cid) {
+-            int xy = gDir[dir];
++            int xy = dir2xy[dir];
+             Point p;
+             p[xy] = node->loc[xy];
+             p[1 - xy] = cands[cid].second->loc[1 - xy];
+@@ -182,16 +182,16 @@ void TraverseAndAddSteiner(const shared_ptr<TreeNode>& node, bool low, array<vec
+     }
+ }
+ 
+-void Refine::flip(Tree& tree) {
++void Refine::Flip(Tree& tree) {
+     WireLengthEvalBase cur(tree), pre;
+ 
+     do {
+         pre = cur;
+         array<DTYPE, 2> g;  // low, up
+-        int num_node = tree.UpdateId();
+-        array<vector<bool>, 2> best_low_or_up = {vector<bool>(num_node), vector<bool>(num_node)};
+-        UpdateSubTree(tree.source, g, best_low_or_up);
+-        TraverseAndAddSteiner(tree.source, true, best_low_or_up);
++        int numNode = tree.UpdateId();
++        array<vector<bool>, 2> bestLowOrUp = {vector<bool>(numNode), vector<bool>(numNode)};
++        UpdateSubTree(tree.source, g, bestLowOrUp);
++        TraverseAndAddSteiner(tree.source, true, bestLowOrUp);
+         tree.RemovePhyRedundantSteiner();
+         cur.Update(tree);
+     } while (cur.wireLength < pre.wireLength);
+diff --git a/src/third_party/salt/refine/refine.h b/src/third_party/salt/refine/refine.h
+index 370e2cf9..c7a37e42 100644
+--- a/src/third_party/salt/refine/refine.h
++++ b/src/third_party/salt/refine/refine.h
+@@ -4,13 +4,12 @@
+ 
+ namespace salt {
+ 
+-class Refine
+-{
+- public:
+-  static void cancelIntersect(Tree& tree);
+-  static void flip(Tree& tree);
+-  static void uShift(Tree& tree);  // should be after flip to achieve good quality
+-  static void substitute(Tree& tree, double eps, bool useRTree = true);
++class Refine {
++public:
++    static void CancelIntersect(Tree& tree);
++    static void Flip(Tree& tree);
++    static void UShift(Tree& tree);  // should be after Flip to achieve good quality
++    static void Substitute(Tree& tree, double eps, bool useRTree = true);
+ };
+ 
+ }  // namespace salt
+\ No newline at end of file
+diff --git a/src/third_party/salt/refine/substitute.cpp b/src/third_party/salt/refine/substitute.cpp
+index bb90fead..02083af4 100644
+--- a/src/third_party/salt/refine/substitute.cpp
++++ b/src/third_party/salt/refine/substitute.cpp
+@@ -1,12 +1,13 @@
++#include "refine.h"
++
++#include "salt/base/eval.h"
++#include "salt/base/mst.h"
++
+ #include <boost/geometry.hpp>
+ #include <boost/geometry/geometries/point.hpp>
+ #include <boost/geometry/geometries/segment.hpp>
+ #include <boost/geometry/index/rtree.hpp>
+ 
+-#include "refine.h"
+-#include "salt/base/eval.h"
+-#include "salt/base/mst.h"
+-
+ namespace salt {
+ 
+ namespace bg = boost::geometry;
+@@ -17,216 +18,216 @@ using BSegment = bg::model::segment<BPoint>;
+ using BBox = bg::model::box<BPoint>;
+ using BPolygon = bg::model::polygon<BPoint>;
+ using RNode = pair<BBox, shared_ptr<TreeNode>>;  // R-Tree node
+-struct RNodeComp
+-{
+-  bool operator()(const RNode& l, const RNode& r) const { return bg::equals(l.first, r.first) && l.second == r.second; }
++struct RNodeComp {
++    bool operator()(const RNode& l, const RNode& r) const {
++        return bg::equals(l.first, r.first) && l.second == r.second;
++    }
+ };
+ 
+-void Refine::substitute(Tree& tree, double eps, bool useRTree)
+-{
+-  bgi::rtree<RNode, bgi::rstar<8>, bgi::indexable<RNode>, RNodeComp> rtree;
+-  if (useRTree) {
+-    tree.postOrder([&](const shared_ptr<TreeNode>& n) {
+-      if (n->parent) {
+-        BBox s;
+-        bg::envelope(BSegment(BPoint(n->loc.x, n->loc.y), BPoint(n->parent->loc.x, n->parent->loc.y)), s);
+-        rtree.insert({s, n});
+-      }
+-    });
+-  }
+-  auto disconnect = [&](const shared_ptr<TreeNode>& n) {
++void Refine::Substitute(Tree& tree, double eps, bool useRTree) {
++    bgi::rtree<RNode, bgi::rstar<8>, bgi::indexable<RNode>, RNodeComp> rtree;
+     if (useRTree) {
+-      BBox s;
+-      bg::envelope(BSegment(BPoint(n->loc.x, n->loc.y), BPoint(n->parent->loc.x, n->parent->loc.y)), s);
+-      rtree.remove({s, n});
++        tree.PostOrder([&](const shared_ptr<TreeNode>& n) {
++            if (n->parent) {
++                BBox s;
++                bg::envelope(BSegment(BPoint(n->loc.x, n->loc.y), BPoint(n->parent->loc.x, n->parent->loc.y)), s);
++                rtree.insert({s, n});
++            }
++        });
+     }
+-    TreeNode::resetParent(n);
+-  };
+-  auto connect = [&](const shared_ptr<TreeNode>& n, const shared_ptr<TreeNode>& parent) {
+-    TreeNode::setParent(n, parent);
+-    if (useRTree) {
+-      BBox s;
+-      bg::envelope(BSegment(BPoint(n->loc.x, n->loc.y), BPoint(parent->loc.x, parent->loc.y)), s);
+-      rtree.insert({s, n});
+-    }
+-  };
+-  while (true) {
+-    // Get nearest neighbors
+-    tree.UpdateId();
+-    vector<shared_ptr<TreeNode>> nodes = tree.ObtainNodes(),
+-                                 ordered_nodes(nodes.size());  // note: all pins should be covered
+-    vector<Point> points(nodes.size());
+-    for (int i = 0; i < nodes.size(); ++i) {
+-      ordered_nodes[nodes[i]->id] = nodes[i];
+-      points[nodes[i]->id] = nodes[i]->loc;  // TODO: move within bracket
+-    }
+-    nodes = ordered_nodes;
+-    vector<vector<int>> nearest_neighbors;
+-    if (!useRTree) {
+-      MstBuilder mst_builder;
+-      mst_builder.GetAllNearestNeighbors(points, nearest_neighbors);
+-    } else {
+-      nearest_neighbors.resize(nodes.size());
+-      for (auto n : nodes) {
+-        if (n->parent) {
+-          Point c = n->loc;  // center
+-          DTYPE radius = n->WireToParent();
+-          // diamond is too slow...
+-          // BPolygon diamond;
+-          // diamond.outer().emplace_back(c.x - radius, c.y);
+-          // diamond.outer().emplace_back(c.x, c.y + radius);
+-          // diamond.outer().emplace_back(c.x + radius, c.y);
+-          // diamond.outer().emplace_back(c.x, c.y - radius);
+-          // diamond.outer().emplace_back(c.x - radius, c.y);
+-          BBox query_box{{c.x - radius, c.y - radius}, {c.x + radius, c.y + radius}};
+-          vector<RNode> cands;
+-          rtree.query(bgi::intersects(query_box), back_inserter(cands));  // TODO: change back_inserter
+-          for (const auto& cand : cands) {
+-            nearest_neighbors[n->id].push_back(cand.second->id);
+-          }
++    auto Disconnect = [&](const shared_ptr<TreeNode>& n) {
++        if (useRTree) {
++            BBox s;
++            bg::envelope(BSegment(BPoint(n->loc.x, n->loc.y), BPoint(n->parent->loc.x, n->parent->loc.y)), s);
++            rtree.remove({s, n});
+         }
+-      }
+-    }
+-
+-    // Prune descendants in nearest neighbors
+-    vector<int> pre_order_idxes(nodes.size(), -1);
+-    int global_pre_order_idx = 0;
+-    function<void(const shared_ptr<TreeNode>&)> remove_descendants = [&](const shared_ptr<TreeNode>& node) {
+-      pre_order_idxes[node->id] = global_pre_order_idx++;
+-      for (auto child : node->children) {
+-        remove_descendants(child);
+-      }
+-      for (auto& neigh_idx : nearest_neighbors[node->id]) {
+-        int neigh_pre_order_idx = pre_order_idxes[neigh_idx];
+-        if (neigh_pre_order_idx != -1 && neigh_pre_order_idx >= pre_order_idxes[node->id]) {
+-          neigh_idx = -1;  // -1 stands for "descendant"
++        TreeNode::ResetParent(n);
++    };
++    auto Connect = [&](const shared_ptr<TreeNode>& n, const shared_ptr<TreeNode>& parent) {
++        TreeNode::SetParent(n, parent);
++        if (useRTree) {
++            BBox s;
++            bg::envelope(BSegment(BPoint(n->loc.x, n->loc.y), BPoint(parent->loc.x, parent->loc.y)), s);
++            rtree.insert({s, n});
+         }
+-      }
+     };
+-    remove_descendants(tree.source);
++    while (true) {
++        // Get nearest neighbors
++        int num = tree.UpdateId();
++        vector<shared_ptr<TreeNode>> nodes = tree.ObtainNodes(),
++                                     orderedNodes(nodes.size());  // note: all pins should be covered
++        vector<Point> points(nodes.size());
++        for (int i = 0; i < nodes.size(); ++i) {
++            orderedNodes[nodes[i]->id] = nodes[i];
++            points[nodes[i]->id] = nodes[i]->loc;  // TODO: move within bracket
++        }
++        nodes = orderedNodes;
++        vector<vector<int>> nearestNeighbors;
++        if (!useRTree) {
++            MstBuilder mstB;
++            mstB.GetAllNearestNeighbors(points, nearestNeighbors);
++        } else {
++            nearestNeighbors.resize(nodes.size());
++            for (auto n : nodes) {
++                if (n->parent) {
++                    Point c = n->loc;  // center
++                    DTYPE radius = n->WireToParent();
++                    // diamond is too slow...
++                    // BPolygon diamond;
++                    // diamond.outer().emplace_back(c.x - radius, c.y);
++                    // diamond.outer().emplace_back(c.x, c.y + radius);
++                    // diamond.outer().emplace_back(c.x + radius, c.y);
++                    // diamond.outer().emplace_back(c.x, c.y - radius);
++                    // diamond.outer().emplace_back(c.x - radius, c.y);
++                    BBox queryBox{{c.x - radius, c.y - radius}, {c.x + radius, c.y + radius}};
++                    vector<RNode> cands;
++                    rtree.query(bgi::intersects(queryBox), back_inserter(cands));  // TODO: change back_inserter
++                    for (const auto& cand : cands) {
++                        nearestNeighbors[n->id].push_back(cand.second->id);
++                    }
++                }
++            }
++        }
+ 
+-    // Init path lengths and subtree slacks
+-    vector<DTYPE> path_lengths(nodes.size());
+-    vector<DTYPE> slacks(nodes.size());
+-    auto update_path_lengths = [&](const shared_ptr<TreeNode>& node) {
+-      if (node->parent) {
+-        path_lengths[node->id] = path_lengths[node->parent->id] + node->WireToParent();
+-      } else {
+-        path_lengths[node->id] = 0;
+-      }
+-    };
+-    auto update_slacks = [&](const shared_ptr<TreeNode>& node) {
+-      if (node->children.empty()) {
+-        slacks[node->id] = Dist(node->loc, tree.source->loc) * (1 + eps) - path_lengths[node->id];  // floor here...
+-      } else {
+-        DTYPE min_slack = Dist(node->loc, tree.source->loc) * (1 + eps) - path_lengths[node->id];
+-        for (auto child : node->children) {
+-          min_slack = min(min_slack, slacks[child->id]);
++        // Prune descendants in nearest neighbors
++        vector<int> preOrderIdxes(nodes.size(), -1);
++        int globalPreOrderIdx = 0;
++        function<void(const shared_ptr<TreeNode>&)> removeDescendants = [&](const shared_ptr<TreeNode>& node) {
++            preOrderIdxes[node->id] = globalPreOrderIdx++;
++            for (auto child : node->children) {
++                removeDescendants(child);
++            }
++            for (auto& neighIdx : nearestNeighbors[node->id]) {
++                int neighPreOrderIdx = preOrderIdxes[neighIdx];
++                if (neighPreOrderIdx != -1 && neighPreOrderIdx >= preOrderIdxes[node->id]) {
++                    neighIdx = -1;  // -1 stands for "descendant"
++                }
++            }
++        };
++        removeDescendants(tree.source);
++
++        // Init path lengths and subtree slacks
++        vector<DTYPE> pathLengths(nodes.size());
++        vector<DTYPE> slacks(nodes.size());
++        auto UpdatePathLengths = [&](const shared_ptr<TreeNode>& node) {
++            if (node->parent) {
++                pathLengths[node->id] = pathLengths[node->parent->id] + node->WireToParent();
++            } else {
++                pathLengths[node->id] = 0;
++            }
++        };
++        auto UpdateSlacks = [&](const shared_ptr<TreeNode>& node) {
++            if (node->children.empty()) {
++                slacks[node->id] =
++                    Dist(node->loc, tree.source->loc) * (1 + eps) - pathLengths[node->id];  // floor here...
++            } else {
++                DTYPE minSlack = Dist(node->loc, tree.source->loc) * (1 + eps) - pathLengths[node->id];
++                for (auto child : node->children) {
++                    minSlack = min(minSlack, slacks[child->id]);
++                }
++                slacks[node->id] = minSlack;
++            }
++        };
++        tree.PreOrder(UpdatePathLengths);
++        tree.PostOrder(UpdateSlacks);
++
++        // Find legal candidate moves
++        using MoveT = tuple<DTYPE, shared_ptr<TreeNode>, shared_ptr<TreeNode>>;
++        vector<MoveT> candidateMoves;  // <wireLengthDelta, node, newParent>
++        auto GetNearestPoint = [](const shared_ptr<TreeNode>& target, const shared_ptr<TreeNode>& neigh) {
++            Box box(neigh->loc, neigh->parent->loc);
++            box.Legalize();
++            return box.GetNearestPointTo(target->loc);
++        };
++        for (auto node : nodes) {
++            if (!(node->parent)) {
++                continue;
++            }
++            DTYPE bestWireLengthDelta = 0;  // the negative, the better
++            shared_ptr<TreeNode> bestNewParent;
++            for (int neighIdx : nearestNeighbors[node->id]) {
++                if (neighIdx == -1 || !nodes[neighIdx]->parent) continue;
++                auto neigh = nodes[neighIdx];
++                auto neighParent = neigh->parent;
++                auto steinerPt = GetNearestPoint(node, neigh);
++                DTYPE wireLengthDelta = Dist(node->loc, steinerPt) - node->WireToParent();
++                if (wireLengthDelta < bestWireLengthDelta) {  // has wire length improvement
++                    DTYPE pathLengthDelta =
++                        pathLengths[neighParent->id] + Dist(node->loc, neighParent->loc) - pathLengths[node->id];
++                    if (pathLengthDelta <= slacks[node->id]) {  // make path length under control
++                        bestWireLengthDelta = wireLengthDelta;
++                        bestNewParent = neigh;
++                    }
++                }
++            }
++            if (bestNewParent) {
++                candidateMoves.emplace_back(bestWireLengthDelta, node, bestNewParent);
++            }
++        }
++        if (candidateMoves.empty()) {
++            break;
+         }
+-        slacks[node->id] = min_slack;
+-      }
+-    };
+-    tree.preOrder(update_path_lengths);
+-    tree.postOrder(update_slacks);
+ 
+-    // Find legal candidate moves
+-    using MoveT = tuple<DTYPE, shared_ptr<TreeNode>, shared_ptr<TreeNode>>;
+-    vector<MoveT> candidate_moves;  // <wire_length_delta, node, newParent>
+-    auto get_nearest_point = [](const shared_ptr<TreeNode>& target, const shared_ptr<TreeNode>& neigh) {
+-      Box box(neigh->loc, neigh->parent->loc);
+-      box.Legalize();
+-      return box.GetNearestPointTo(target->loc);
+-    };
+-    for (auto node : nodes) {
+-      if (!(node->parent)) {
+-        continue;
+-      }
+-      DTYPE best_wire_length_delta = 0;  // the negative, the better
+-      shared_ptr<TreeNode> best_new_parent;
+-      for (int neigh_idx : nearest_neighbors[node->id]) {
+-        if (neigh_idx == -1 || !nodes[neigh_idx]->parent)
+-          continue;
+-        auto neigh = nodes[neigh_idx];
+-        auto neigh_parent = neigh->parent;
+-        auto steiner_pt = get_nearest_point(node, neigh);
+-        DTYPE wire_length_delta = Dist(node->loc, steiner_pt) - node->WireToParent();
+-        if (wire_length_delta < best_wire_length_delta) {  // has wire length improvement
+-          DTYPE path_length_delta = path_lengths[neigh_parent->id] + Dist(node->loc, neigh_parent->loc) - path_lengths[node->id];
+-          if (path_length_delta <= slacks[node->id]) {  // make path length under control
+-            best_wire_length_delta = wire_length_delta;
+-            best_new_parent = neigh;
+-          }
++        // Try candidate moves in the order of descending wire length savings
++        // Note that earlier moves may influence the legality of later one
++        sort(candidateMoves.begin(), candidateMoves.end(), [](const MoveT& lhs, const MoveT& rhs){
++            return get<0>(lhs) < get<0>(rhs);
++        });
++        for (const auto& move : candidateMoves) {
++            auto node = get<1>(move), neigh = get<2>(move);
++            auto neighParent = neigh->parent;
++            // check due to earlier moves
++            if (TreeNode::IsAncestor(node, neighParent)) continue;
++            DTYPE pathLengthDelta =
++                pathLengths[neighParent->id] + Dist(node->loc, neighParent->loc) - pathLengths[node->id];
++            if (pathLengthDelta > slacks[node->id]) continue;
++            auto steinerPt = GetNearestPoint(node, neigh);
++            DTYPE wireLengthDelta = Dist(node->loc, steinerPt) - node->WireToParent();
++            if (wireLengthDelta >= 0) continue;
++            // break
++            Disconnect(node);
++            // reroot
++            if (steinerPt == neigh->loc) {
++                Connect(node, neigh);
++            } else if (steinerPt == neighParent->loc) {
++                Connect(node, neighParent);
++            } else {
++                auto steinerNode = make_shared<TreeNode>(steinerPt);
++                Connect(steinerNode, neighParent);
++                Disconnect(neigh);
++                Connect(neigh, steinerNode);
++                Connect(node, steinerNode);
++                // for later moves
++                steinerNode->id = nodes.size();
++                nodes.push_back(steinerNode);
++                pathLengths.push_back(pathLengths[neighParent->id] + steinerNode->WireToParent());
++                slacks.push_back(Dist(steinerNode->loc, tree.source->loc) * (1 + eps) - pathLengths.back());
++            }
++            // update slack for later moves: first subtree, then path to source
++            TreeNode::PreOrder(neighParent, UpdatePathLengths);
++            TreeNode::PostOrder(neighParent, UpdateSlacks);
++            auto tmp = neighParent;
++            while (tmp->parent) {
++                slacks[tmp->parent->id] = min(slacks[tmp->parent->id], slacks[tmp->id]);
++                tmp = tmp->parent;
++            }
+         }
+-      }
+-      if (best_new_parent) {
+-        candidate_moves.emplace_back(best_wire_length_delta, node, best_new_parent);
+-      }
+-    }
+-    if (candidate_moves.empty()) {
+-      break;
+-    }
+ 
+-    // Try candidate moves in the order of descending wire length savings
+-    // Note that earlier moves may influence the legality of later one
+-    sort(candidate_moves.begin(), candidate_moves.end(), [](const MoveT& lhs, const MoveT& rhs) { return get<0>(lhs) < get<0>(rhs); });
+-    for (const auto& move : candidate_moves) {
+-      auto node = get<1>(move), neigh = get<2>(move);
+-      auto neigh_parent = neigh->parent;
+-      // check due to earlier moves
+-      if (TreeNode::isAncestor(node, neigh_parent))
+-        continue;
+-      DTYPE path_length_delta = path_lengths[neigh_parent->id] + Dist(node->loc, neigh_parent->loc) - path_lengths[node->id];
+-      if (path_length_delta > slacks[node->id])
+-        continue;
+-      auto steiner_pt = get_nearest_point(node, neigh);
+-      DTYPE wire_length_delta = Dist(node->loc, steiner_pt) - node->WireToParent();
+-      if (wire_length_delta >= 0)
+-        continue;
+-      // break
+-      disconnect(node);
+-      // reroot
+-      if (steiner_pt == neigh->loc) {
+-        connect(node, neigh);
+-      } else if (steiner_pt == neigh_parent->loc) {
+-        connect(node, neigh_parent);
+-      } else {
+-        auto steiner_node = make_shared<TreeNode>(steiner_pt);
+-        connect(steiner_node, neigh_parent);
+-        disconnect(neigh);
+-        connect(neigh, steiner_node);
+-        connect(node, steiner_node);
+-        // for later moves
+-        steiner_node->id = nodes.size();
+-        nodes.push_back(steiner_node);
+-        path_lengths.push_back(path_lengths[neigh_parent->id] + steiner_node->WireToParent());
+-        slacks.push_back(Dist(steiner_node->loc, tree.source->loc) * (1 + eps) - path_lengths.back());
+-      }
+-      // update slack for later moves: first subtree, then path to source
+-      TreeNode::preOrder(neigh_parent, update_path_lengths);
+-      TreeNode::postOrder(neigh_parent, update_slacks);
+-      auto tmp = neigh_parent;
+-      while (tmp->parent) {
+-        slacks[tmp->parent->id] = min(slacks[tmp->parent->id], slacks[tmp->id]);
+-        tmp = tmp->parent;
+-      }
++        // Finalize
++        // tree.RemoveTopoRedundantSteiner();
++        tree.PostOrderCopy([&](const shared_ptr<TreeNode>& node) {
++            // degree may change after post-order traversal of its children
++            if (node->pin) return;
++            if (node->children.empty()) {
++                Disconnect(node);
++            } else if (node->children.size() == 1) {
++                auto oldParent = node->parent, oldChild = node->children[0];
++                Disconnect(node);
++                Disconnect(oldChild);
++                Connect(oldChild, oldParent);
++            }
++        });
+     }
+-
+-    // Finalize
+-    // tree.RemoveTopoRedundantSteiner();
+-    tree.postOrderCopy([&](const shared_ptr<TreeNode>& node) {
+-      // degree may change after post-order traversal of its children
+-      if (node->pin)
+-        return;
+-      if (node->children.empty()) {
+-        disconnect(node);
+-      } else if (node->children.size() == 1) {
+-        auto old_parent = node->parent, old_child = node->children[0];
+-        disconnect(node);
+-        disconnect(old_child);
+-        connect(old_child, old_parent);
+-      }
+-    });
+-  }
+ }
+ 
+ }  // namespace salt
+\ No newline at end of file
+diff --git a/src/third_party/salt/refine/u_shift.cpp b/src/third_party/salt/refine/u_shift.cpp
+index b923661c..80f662ff 100644
+--- a/src/third_party/salt/refine/u_shift.cpp
++++ b/src/third_party/salt/refine/u_shift.cpp
+@@ -7,7 +7,7 @@ namespace salt {
+ //  c    pp -> root
+ // four Nodes:      c       - cur   - p     - pp    -> root
+ // four points:     out[0]  - in[0] - in[1] - out[1]-> root
+-void Refine::uShift(Tree& tree) {
++void Refine::UShift(Tree& tree) {
+     auto nodes = tree.ObtainNodes();  // fix the nodes considered (no deletion will happen)
+     for (auto cur : nodes) {
+         Point in[2], out[2];
+@@ -35,9 +35,9 @@ void Refine::uShift(Tree& tree) {
+             for (int i = 0; i < 2; ++i) newP[i][d] = closer;            // set pri dir
+             for (int i = 0; i < 2; ++i) newP[i][1 - d] = in[i][1 - d];  // set sec dir
+ 
+-            TreeNode::resetParent(c);
+-            TreeNode::resetParent(cur);
+-            TreeNode::resetParent(p);
++            TreeNode::ResetParent(c);
++            TreeNode::ResetParent(cur);
++            TreeNode::ResetParent(p);
+             //           inS[0]    inS[1]
+             //              |         |
+             // outS[0] - newS[0] - newS[1] - outS[1] -> root
+@@ -50,13 +50,13 @@ void Refine::uShift(Tree& tree) {
+                 else {
+                     newS[i] = make_shared<TreeNode>(newP[i]);
+                     if (i == 0)
+-                        TreeNode::setParent(outS[i], newS[i]);
++                        TreeNode::SetParent(outS[i], newS[i]);
+                     else
+-                        TreeNode::setParent(newS[i], outS[i]);
++                        TreeNode::SetParent(newS[i], outS[i]);
+                 }
+-                TreeNode::setParent(inS[i], newS[i]);
++                TreeNode::SetParent(inS[i], newS[i]);
+             }
+-            TreeNode::setParent(newS[0], newS[1]);
++            TreeNode::SetParent(newS[0], newS[1]);
+         }
+     }
+ 
+diff --git a/src/third_party/salt/salt.cpp b/src/third_party/salt/salt.cpp
+index 6e87682f..34d36d6e 100644
+--- a/src/third_party/salt/salt.cpp
++++ b/src/third_party/salt/salt.cpp
+@@ -6,92 +6,86 @@
+ 
+ namespace salt {
+ 
+-void SaltInterface::Init(Tree& min_tree, shared_ptr<Pin> src_pin)
+-{
+-  min_tree.UpdateId();
+-  auto mt_nodes = min_tree.ObtainNodes();
+-  sl_nodes.resize(mt_nodes.size());
+-  shortest_dists.resize(mt_nodes.size());
+-  cur_dists.resize(mt_nodes.size());
+-  for (auto mt_node : mt_nodes) {
+-    sl_nodes[mt_node->id] = make_shared<TreeNode>(mt_node->loc, mt_node->pin, mt_node->id);
+-    shortest_dists[mt_node->id] = Dist(mt_node->loc, src_pin->loc);
+-    cur_dists[mt_node->id] = numeric_limits<DTYPE>::max();
+-  }
+-  cur_dists[src_pin->id] = 0;
+-  sl_src = sl_nodes[src_pin->id];
++void SaltBase::Init(Tree& minTree, shared_ptr<Pin> srcP) {
++    minTree.UpdateId();
++    auto mtNodes = minTree.ObtainNodes();
++    slNodes.resize(mtNodes.size());
++    shortestDists.resize(mtNodes.size());
++    curDists.resize(mtNodes.size());
++    for (auto mtN : mtNodes) {
++        slNodes[mtN->id] = make_shared<TreeNode>(mtN->loc, mtN->pin, mtN->id);
++        shortestDists[mtN->id] = Dist(mtN->loc, srcP->loc);
++        curDists[mtN->id] = numeric_limits<DTYPE>::max();
++    }
++    curDists[srcP->id] = 0;
++    slSrc = slNodes[srcP->id];
+ }
+ 
+-void SaltInterface::Finalize(const Net& net, Tree& tree)
+-{
+-  for (auto n : sl_nodes)
+-    if (n->parent)
+-      sl_nodes[n->parent->id]->children.push_back(n);
+-  tree.source = sl_src;
+-  tree.net = &net;
++void SaltBase::Finalize(const Net& net, Tree& tree) {
++    for (auto n : slNodes)
++        if (n->parent) slNodes[n->parent->id]->children.push_back(n);
++    tree.source = slSrc;
++    tree.net = &net;
+ }
+ 
+-void SaltBuilder::Run(const Net& net, Tree& tree, double eps, int refineLevel)
+-{
+-  // SMT
+-  Tree smt;
+-  FluteBuilder flute_builder;
+-  flute_builder.Run(net, smt);
++void SaltBuilder::Run(const Net& net, Tree& tree, double eps, int refineLevel) {
++    // SMT
++    Tree smt;
++    FluteBuilder fluteB;
++    fluteB.Run(net, smt);
+ 
+-  // Refine SMT
+-  if (refineLevel >= 1) {
+-    Refine::flip(smt);
+-    Refine::uShift(smt);
+-  }
++    // Refine SMT
++    if (refineLevel >= 1) {
++        Refine::Flip(smt);
++        Refine::UShift(smt);
++    }
+ 
+-  // Init
+-  Init(smt, net.source());
++    // Init
++    Init(smt, net.source());
+ 
+-  // DFS
+-  DFS(smt.source, sl_src, eps);
+-  Finalize(net, tree);
+-  tree.RemoveTopoRedundantSteiner();
++    // DFS
++    DFS(smt.source, slSrc, eps);
++    Finalize(net, tree);
++    tree.RemoveTopoRedundantSteiner();
+ 
+-  // Connect breakpoints to source by RSA
+-  salt::RsaBuilder rsa_builder;
+-  rsa_builder.ReplaceRootChildren(tree);
++    // Connect breakpoints to source by RSA
++    salt::RsaBuilder rsaB;
++    rsaB.ReplaceRootChildren(tree);
+ 
+-  // Refine SALT
+-  if (refineLevel >= 1) {
+-    Refine::cancelIntersect(tree);
+-    Refine::flip(tree);
+-    Refine::uShift(tree);
+-    if (refineLevel >= 2) {
+-      Refine::substitute(tree, eps, refineLevel == 3);
++    // Refine SALT
++    if (refineLevel >= 1) {
++        Refine::CancelIntersect(tree);
++        Refine::Flip(tree);
++        Refine::UShift(tree);
++        if (refineLevel >= 2) {
++            Refine::Substitute(tree, eps, refineLevel == 3);
++        }
+     }
+-  }
+ }
+ 
+-bool SaltBuilder::Relax(const shared_ptr<TreeNode>& u, const shared_ptr<TreeNode>& v)
+-{
+-  DTYPE new_dist = cur_dists[u->id] + Dist(u->loc, v->loc);
+-  if (cur_dists[v->id] > new_dist) {
+-    cur_dists[v->id] = new_dist;
+-    v->parent = u;
+-    return true;
+-  } else if (cur_dists[v->id] == new_dist && Dist(u->loc, v->loc) < v->WireToParentChecked()) {
+-    v->parent = u;
+-    return true;
+-  } else
+-    return false;
++bool SaltBuilder::Relax(const shared_ptr<TreeNode>& u, const shared_ptr<TreeNode>& v) {
++    DTYPE newDist = curDists[u->id] + Dist(u->loc, v->loc);
++    if (curDists[v->id] > newDist) {
++        curDists[v->id] = newDist;
++        v->parent = u;
++        return true;
++    } else if (curDists[v->id] == newDist && Dist(u->loc, v->loc) < v->WireToParentChecked()) {
++        v->parent = u;
++        return true;
++    } else
++        return false;
+ }
+ 
+-void SaltBuilder::DFS(const shared_ptr<TreeNode>& mst_node, const shared_ptr<TreeNode>& sl_node, double eps)
+-{
+-  if (mst_node->pin && cur_dists[sl_node->id] > (1 + eps) * shortest_dists[sl_node->id]) {
+-    sl_node->parent = sl_src;
+-    cur_dists[sl_node->id] = shortest_dists[sl_node->id];
+-  }
+-  for (auto c : mst_node->children) {
+-    Relax(sl_node, sl_nodes[c->id]);
+-    DFS(c, sl_nodes[c->id], eps);
+-    Relax(sl_nodes[c->id], sl_node);
+-  }
++void SaltBuilder::DFS(const shared_ptr<TreeNode>& smtNode, const shared_ptr<TreeNode>& slNode, double eps) {
++    if (smtNode->pin && curDists[slNode->id] > (1 + eps) * shortestDists[slNode->id]) {
++        slNode->parent = slSrc;
++        curDists[slNode->id] = shortestDists[slNode->id];
++    }
++    for (auto c : smtNode->children) {
++        Relax(slNode, slNodes[c->id]);
++        DFS(c, slNodes[c->id], eps);
++        Relax(slNodes[c->id], slNode);
++    }
+ }
+ 
+ }  // namespace salt
+diff --git a/src/third_party/salt/salt.h b/src/third_party/salt/salt.h
+index c4f38769..640e0401 100644
+--- a/src/third_party/salt/salt.h
++++ b/src/third_party/salt/salt.h
+@@ -4,28 +4,26 @@
+ 
+ namespace salt {
+ 
+-class SaltInterface
+-{
+- protected:
+-  vector<shared_ptr<TreeNode>> sl_nodes;  // nodes of the shallow-light tree
+-  vector<DTYPE> shortest_dists;
+-  vector<DTYPE> cur_dists;
+-  shared_ptr<TreeNode> sl_src;  // source node of the shallow-light tree
++class SaltBase {
++protected:
++    vector<shared_ptr<TreeNode>> slNodes; // nodes of the shallow-light tree
++    vector<DTYPE> shortestDists;
++    vector<DTYPE> curDists;
++    shared_ptr<TreeNode> slSrc;  // source node of the shallow-light tree
+ 
+-  void Init(Tree& min_tree, shared_ptr<Pin> src_pin);  // tree of minimum weight
+-  void Finalize(const Net& net, Tree& tree);
+-  virtual bool Relax(const shared_ptr<TreeNode>& u, const shared_ptr<TreeNode>& v) = 0;  // from u to v
+-  virtual void DFS(const shared_ptr<TreeNode>& mst_node, const shared_ptr<TreeNode>& sl_node, double eps) = 0;
++    void Init(Tree& minTree, shared_ptr<Pin> srcP);   // tree of minimum weight
++    void Finalize(const Net& net, Tree& tree);
++    virtual bool Relax(const shared_ptr<TreeNode>& u, const shared_ptr<TreeNode>& v) = 0;  // from u to v
++    virtual void DFS(const shared_ptr<TreeNode>& mstNode, const shared_ptr<TreeNode>& slNode, double eps) = 0;
+ };
+ 
+-class SaltBuilder : public SaltInterface
+-{
+- public:
+-  void Run(const Net& net, Tree& tree, double eps, int refineLevel = 3);
++class SaltBuilder : public SaltBase {
++public:
++    void Run(const Net& net, Tree& tree, double eps, int refineLevel = 3);
+ 
+- protected:
+-  bool Relax(const shared_ptr<TreeNode>& u, const shared_ptr<TreeNode>& v);  // from u to v
+-  void DFS(const shared_ptr<TreeNode>& mst_node, const shared_ptr<TreeNode>& sl_node, double eps);
++protected:
++    bool Relax(const shared_ptr<TreeNode>& u, const shared_ptr<TreeNode>& v);  // from u to v
++    void DFS(const shared_ptr<TreeNode>& mstNode, const shared_ptr<TreeNode>& slNode, double eps);
+ };
+ 
+ }  // namespace salt
+\ No newline at end of file
+diff --git a/src/third_party/salt/utils/geo.h b/src/third_party/salt/utils/geo.h
+index 19c5181f..fc0445a2 100644
+--- a/src/third_party/salt/utils/geo.h
++++ b/src/third_party/salt/utils/geo.h
+@@ -314,24 +314,24 @@ inline double L2Dist(const BoxT<T>& box1, const BoxT<T>& box2) {
+ // use BoxT instead of T & BoxT<T> to make it more general
+ template <typename BoxT>
+ void MergeRects(std::vector<BoxT>& boxes, int mergeDir) {
+-    int boundary_dir = 1 - mergeDir;
++    int boundaryDir = 1 - mergeDir;
+     std::sort(boxes.begin(), boxes.end(), [&](const BoxT& lhs, const BoxT& rhs) {
+-        return lhs[boundary_dir].low < rhs[boundary_dir].low ||
+-               (lhs[boundary_dir].low == rhs[boundary_dir].low && lhs[mergeDir].low < rhs[mergeDir].low);
++        return lhs[boundaryDir].low < rhs[boundaryDir].low ||
++               (lhs[boundaryDir].low == rhs[boundaryDir].low && lhs[mergeDir].low < rhs[mergeDir].low);
+     });
+-    std::vector<BoxT> merged_boxes;
+-    merged_boxes.push_back(boxes.front());
++    std::vector<BoxT> mergedBoxes;
++    mergedBoxes.push_back(boxes.front());
+     for (int i = 1; i < boxes.size(); ++i) {
+-        auto& last_box = merged_boxes.back();
+-        auto& sliced_box = boxes[i];
+-        if (sliced_box[boundary_dir] == last_box[boundary_dir] &&
+-            sliced_box[mergeDir].low <= last_box[mergeDir].high) {  // aligned and intersected
+-            last_box[mergeDir] = last_box[mergeDir].UnionWith(sliced_box[mergeDir]);
++        auto& lastBox = mergedBoxes.back();
++        auto& slicedBox = boxes[i];
++        if (slicedBox[boundaryDir] == lastBox[boundaryDir] &&
++            slicedBox[mergeDir].low <= lastBox[mergeDir].high) {  // aligned and intersected
++            lastBox[mergeDir] = lastBox[mergeDir].UnionWith(slicedBox[mergeDir]);
+         } else {  // neither misaligned not seperated
+-            merged_boxes.push_back(sliced_box);
++            mergedBoxes.push_back(slicedBox);
+         }
+     }
+-    boxes = move(merged_boxes);
++    boxes = move(mergedBoxes);
+ }
+ 
+ // Slice polygons along sliceDir
+@@ -339,40 +339,40 @@ void MergeRects(std::vector<BoxT>& boxes, int mergeDir) {
+ // assume no degenerated case
+ template <typename T>
+ void SlicePolygons(std::vector<BoxT<T>>& boxes, int sliceDir) {
+-    // Line sweep in sweep_dir = 1 - sliceDir
+-    // Suppose sliceDir = y and sweep_dir = x (sweep from left to right)
++    // Line sweep in sweepDir = 1 - sliceDir
++    // Suppose sliceDir = y and sweepDir = x (sweep from left to right)
+     // Not scalable impl (brute force interval query) but fast for small case
+     if (boxes.size() <= 1) return;
+ 
+-    // sort slice lines in sweep_dir
+-    int sweep_dir = 1 - sliceDir;
++    // sort slice lines in sweepDir
++    int sweepDir = 1 - sliceDir;
+     std::vector<T> locs;
+     for (const auto& box : boxes) {
+-        locs.push_back(box[sweep_dir].low);
+-        locs.push_back(box[sweep_dir].high);
++        locs.push_back(box[sweepDir].low);
++        locs.push_back(box[sweepDir].high);
+     }
+     std::sort(locs.begin(), locs.end());
+     locs.erase(std::unique(locs.begin(), locs.end()), locs.end());
+ 
+     // slice each box
+-    std::vector<BoxT<T>> sliced_boxes;
++    std::vector<BoxT<T>> slicedBoxes;
+     for (const auto& box : boxes) {
+-        BoxT<T> sliced_box = box;
+-        auto it_loc = std::lower_bound(locs.begin(), locs.end(), box[sweep_dir].low);
+-        auto it_end = std::upper_bound(it_loc, locs.end(), box[sweep_dir].high);
+-        while ((it_loc + 1) != it_end) {
+-            sliced_box[sweep_dir].Set(*it_loc, *(it_loc + 1));
+-            sliced_boxes.push_back(sliced_box);
+-            ++it_loc;
++        BoxT<T> slicedBox = box;
++        auto itLoc = std::lower_bound(locs.begin(), locs.end(), box[sweepDir].low);
++        auto itEnd = std::upper_bound(itLoc, locs.end(), box[sweepDir].high);
++        while ((itLoc + 1) != itEnd) {
++            slicedBox[sweepDir].Set(*itLoc, *(itLoc + 1));
++            slicedBoxes.push_back(slicedBox);
++            ++itLoc;
+         }
+     }
+-    boxes = move(sliced_boxes);
++    boxes = move(slicedBoxes);
+ 
+     // merge overlaped boxes along slice dir
+     MergeRects(boxes, sliceDir);
+ 
+     // stitch boxes along sweep dir
+-    MergeRects(boxes, sweep_dir);
++    MergeRects(boxes, sweepDir);
+ }
+ 
+ template <typename T>
+diff --git a/src/third_party/salt/utils/prettyprint.h b/src/third_party/salt/utils/prettyprint.h
+index 8acff997..191792f3 100644
+--- a/src/third_party/salt/utils/prettyprint.h
++++ b/src/third_party/salt/utils/prettyprint.h
+@@ -15,251 +15,219 @@
+ 
+ namespace utils {
+ 
+-// SFINAE HasBeginEnd
++// SFINAE has_begin_end
+ 
+ template <typename T, typename = void>
+-struct HasBeginEnd : std::false_type
+-{
+-};
++struct has_begin_end : std::false_type {};
+ template <typename T>
+-struct HasBeginEnd<T, decltype((void) std::begin(std::declval<T>()), (void) std::end(std::declval<T>()))> : std::true_type
+-{
+-};
++struct has_begin_end<T, decltype((void)std::begin(std::declval<T>()), (void)std::end(std::declval<T>()))>
++    : std::true_type {};
+ 
+ // Holds the delimiter values for a specific character type
+ 
+ template <typename TChar>
+-struct DelimitersValues
+-{
+-  using char_type = TChar;
+-  const char_type* prefix;
+-  const char_type* delimiter;
+-  const char_type* postfix;
++struct delimiters_values {
++    using char_type = TChar;
++    const char_type *prefix;
++    const char_type *delimiter;
++    const char_type *postfix;
+ };
+ 
+ // Defines the delimiter values for a specific container and character type
+ 
+ template <typename T, typename TChar = char>
+-struct Delimiters
+-{
+-  using type = DelimitersValues<TChar>;
+-  static const type kValues;
++struct delimiters {
++    using type = delimiters_values<TChar>;
++    static const type values;
+ };
+ 
+ // Functor to print containers. You can use this directly if you want
+-// to specificy a non-default Delimiters type. The printing logic can
++// to specificy a non-default delimiters type. The printing logic can
+ // be customized by specializing the nested template.
+ 
+-template <typename T, typename TChar = char, typename TCharTraits = std::char_traits<TChar>, typename TDelimiters = Delimiters<T, TChar>>
+-struct PrintContainerHelper
+-{
+-  using delimiters_type = TDelimiters;
+-  using ostream_type = std::basic_ostream<TChar, TCharTraits>;
+-
+-  template <typename U>
+-  struct Printer
+-  {
+-    static void printBody(const U& c, ostream_type& stream)
+-    {
+-      auto it = std::begin(c);
+-      const auto the_end = std::end(c);
+-
+-      if (it != the_end) {
+-        for (;;) {
+-          stream << *it;
+-
+-          if (++it == the_end)
+-            break;
+-
+-          if (delimiters_type::values.delimiter != NULL)
+-            stream << delimiters_type::values.delimiter;
++template <typename T,
++          typename TChar = char,
++          typename TCharTraits = std::char_traits<TChar>,
++          typename TDelimiters = delimiters<T, TChar>>
++struct print_container_helper {
++    using delimiters_type = TDelimiters;
++    using ostream_type = std::basic_ostream<TChar, TCharTraits>;
++
++    template <typename U>
++    struct printer {
++        static void print_body(const U &c, ostream_type &stream) {
++            auto it = std::begin(c);
++            const auto the_end = std::end(c);
++
++            if (it != the_end) {
++                for (;;) {
++                    stream << *it;
++
++                    if (++it == the_end) break;
++
++                    if (delimiters_type::values.delimiter != NULL) stream << delimiters_type::values.delimiter;
++                }
++            }
+         }
+-      }
+-    }
+-  };
++    };
+ 
+-  PrintContainerHelper(const T& container) : container_(container) {}
++    print_container_helper(const T &container) : container_(container) {}
+ 
+-  inline void operator()(ostream_type& stream) const
+-  {
+-    if (delimiters_type::values.prefix != NULL)
+-      stream << delimiters_type::values.prefix;
++    inline void operator()(ostream_type &stream) const {
++        if (delimiters_type::values.prefix != NULL) stream << delimiters_type::values.prefix;
+ 
+-    Printer<T>::printBody(container_, stream);
++        printer<T>::print_body(container_, stream);
+ 
+-    if (delimiters_type::values.postfix != NULL)
+-      stream << delimiters_type::values.postfix;
+-  }
++        if (delimiters_type::values.postfix != NULL) stream << delimiters_type::values.postfix;
++    }
+ 
+- private:
+-  const T& container_;
++private:
++    const T &container_;
+ };
+ 
+ // Specialization for pairs
+ 
+ template <typename T, typename TChar, typename TCharTraits, typename TDelimiters>
+ template <typename T1, typename T2>
+-struct PrintContainerHelper<T, TChar, TCharTraits, TDelimiters>::Printer<std::pair<T1, T2>>
+-{
+-  using ostream_type = typename PrintContainerHelper<T, TChar, TCharTraits, TDelimiters>::ostream_type;
+-
+-  static void printBody(const std::pair<T1, T2>& c, ostream_type& stream)
+-  {
+-    stream << c.first;
+-    if (PrintContainerHelper<T, TChar, TCharTraits, TDelimiters>::delimiters_type::values.delimiter != NULL)
+-      stream << PrintContainerHelper<T, TChar, TCharTraits, TDelimiters>::delimiters_type::values.delimiter;
+-    stream << c.second;
+-  }
++struct print_container_helper<T, TChar, TCharTraits, TDelimiters>::printer<std::pair<T1, T2>> {
++    using ostream_type = typename print_container_helper<T, TChar, TCharTraits, TDelimiters>::ostream_type;
++
++    static void print_body(const std::pair<T1, T2> &c, ostream_type &stream) {
++        stream << c.first;
++        if (print_container_helper<T, TChar, TCharTraits, TDelimiters>::delimiters_type::values.delimiter != NULL)
++            stream << print_container_helper<T, TChar, TCharTraits, TDelimiters>::delimiters_type::values.delimiter;
++        stream << c.second;
++    }
+ };
+ 
+ // Specialization for tuples
+ 
+ template <typename T, typename TChar, typename TCharTraits, typename TDelimiters>
+ template <typename... Args>
+-struct PrintContainerHelper<T, TChar, TCharTraits, TDelimiters>::Printer<std::tuple<Args...>>
+-{
+-  using ostream_type = typename PrintContainerHelper<T, TChar, TCharTraits, TDelimiters>::ostream_type;
+-  using element_type = std::tuple<Args...>;
++struct print_container_helper<T, TChar, TCharTraits, TDelimiters>::printer<std::tuple<Args...>> {
++    using ostream_type = typename print_container_helper<T, TChar, TCharTraits, TDelimiters>::ostream_type;
++    using element_type = std::tuple<Args...>;
+ 
+-  template <std::size_t I>
+-  struct Int
+-  {
+-  };
++    template <std::size_t I>
++    struct Int {};
+ 
+-  static void printBody(const element_type& c, ostream_type& stream) { tuplePrint(c, stream, Int<0>()); }
++    static void print_body(const element_type &c, ostream_type &stream) { tuple_print(c, stream, Int<0>()); }
+ 
+-  static void tuplePrint(const element_type&, ostream_type&, Int<sizeof...(Args)>) {}
++    static void tuple_print(const element_type &, ostream_type &, Int<sizeof...(Args)>) {}
+ 
+-  static void tuplePrint(const element_type& c, ostream_type& stream,
+-                         typename std::conditional<sizeof...(Args) != 0, Int<0>, std::nullptr_t>::type)
+-  {
+-    stream << std::get<0>(c);
+-    tuplePrint(c, stream, Int<1>());
+-  }
++    static void tuple_print(const element_type &c,
++                            ostream_type &stream,
++                            typename std::conditional<sizeof...(Args) != 0, Int<0>, std::nullptr_t>::type) {
++        stream << std::get<0>(c);
++        tuple_print(c, stream, Int<1>());
++    }
+ 
+-  template <std::size_t N>
+-  static void tuplePrint(const element_type& c, ostream_type& stream, Int<N>)
+-  {
+-    if (PrintContainerHelper<T, TChar, TCharTraits, TDelimiters>::delimiters_type::values.delimiter != NULL)
+-      stream << PrintContainerHelper<T, TChar, TCharTraits, TDelimiters>::delimiters_type::values.delimiter;
++    template <std::size_t N>
++    static void tuple_print(const element_type &c, ostream_type &stream, Int<N>) {
++        if (print_container_helper<T, TChar, TCharTraits, TDelimiters>::delimiters_type::values.delimiter != NULL)
++            stream << print_container_helper<T, TChar, TCharTraits, TDelimiters>::delimiters_type::values.delimiter;
+ 
+-    stream << std::get<N>(c);
++        stream << std::get<N>(c);
+ 
+-    tuplePrint(c, stream, Int<N + 1>());
+-  }
++        tuple_print(c, stream, Int<N + 1>());
++    }
+ };
+ 
+-// Prints a PrintContainerHelper to the specified stream.
++// Prints a print_container_helper to the specified stream.
+ 
+ template <typename T, typename TChar, typename TCharTraits, typename TDelimiters>
+-inline std::basic_ostream<TChar, TCharTraits>& operator<<(std::basic_ostream<TChar, TCharTraits>& stream,
+-                                                          const PrintContainerHelper<T, TChar, TCharTraits, TDelimiters>& helper)
+-{
+-  helper(stream);
+-  return stream;
++inline std::basic_ostream<TChar, TCharTraits> &operator<<(
++    std::basic_ostream<TChar, TCharTraits> &stream,
++    const print_container_helper<T, TChar, TCharTraits, TDelimiters> &helper) {
++    helper(stream);
++    return stream;
+ }
+ 
+-// Basic IsContainer template; specialize to derive from std::true_type for all desired container types
++// Basic is_container template; specialize to derive from std::true_type for all desired container types
+ 
+ template <typename T>
+-struct IsContainer : std::integral_constant<bool, HasBeginEnd<T>::value>
+-{
+-};
++struct is_container : std::integral_constant<bool, has_begin_end<T>::value> {};
+ 
+ template <typename... T>
+-struct IsContainer<std::pair<T...>> : std::true_type
+-{
+-};
++struct is_container<std::pair<T...>> : std::true_type {};
+ 
+ template <typename... T>
+-struct IsContainer<std::tuple<T...>> : std::true_type
+-{
+-};
++struct is_container<std::tuple<T...>> : std::true_type {};
+ 
+-// Default Delimiters
++// Default delimiters
+ 
+ template <typename T>
+-struct Delimiters<T, char>
+-{
+-  static constexpr DelimitersValues<char> kValues = {"[", ", ", "]"};
++struct delimiters<T, char> {
++    static constexpr delimiters_values<char> values = {"[", ", ", "]"};
+ };
+ 
+ // Delimiters for (unordered_)(multi)set
+ 
+ template <typename... T>
+-struct Delimiters<std::set<T...>>
+-{
+-  static constexpr DelimitersValues<char> kValues = {"{", ", ", "}"};
++struct delimiters<std::set<T...>> {
++    static constexpr delimiters_values<char> values = {"{", ", ", "}"};
+ };
+ 
+ template <typename... T>
+-struct Delimiters<std::multiset<T...>>
+-{
+-  static constexpr DelimitersValues<char> kValues = {"{", ", ", "}"};
++struct delimiters<std::multiset<T...>> {
++    static constexpr delimiters_values<char> values = {"{", ", ", "}"};
+ };
+ 
+ template <typename... T>
+-struct Delimiters<std::unordered_set<T...>>
+-{
+-  static constexpr DelimitersValues<char> kValues = {"{", ", ", "}"};
++struct delimiters<std::unordered_set<T...>> {
++    static constexpr delimiters_values<char> values = {"{", ", ", "}"};
+ };
+ 
+ template <typename... T>
+-struct Delimiters<std::unordered_multiset<T...>>
+-{
+-  static constexpr DelimitersValues<char> kValues = {"{", ", ", "}"};
++struct delimiters<std::unordered_multiset<T...>> {
++    static constexpr delimiters_values<char> values = {"{", ", ", "}"};
+ };
+ 
+ // Delimiters for pair and tuple
+ 
+ template <typename... T>
+-struct Delimiters<std::pair<T...>>
+-{
+-  static constexpr DelimitersValues<char> kValues = {"(", ", ", ")"};
++struct delimiters<std::pair<T...>> {
++    static constexpr delimiters_values<char> values = {"(", ", ", ")"};
+ };
+ 
+ template <typename... T>
+-struct Delimiters<std::tuple<T...>>
+-{
+-  static constexpr DelimitersValues<char> kValues = {"(", ", ", ")"};
++struct delimiters<std::tuple<T...>> {
++    static constexpr delimiters_values<char> values = {"(", ", ", ")"};
+ };
+ 
+-// Type-erasing helper class for easy use of custom Delimiters.
++// Type-erasing helper class for easy use of custom delimiters.
+ // Requires TCharTraits = std::char_traits<TChar> and TChar = char or wchar_t, and MyDelims needs to be defined for
+-// TChar. Usage: "cout << pretty_print::CustomDelims<MyDelims>(x)".
++// TChar. Usage: "cout << pretty_print::custom_delims<MyDelims>(x)".
+ 
+-struct CustomDelimsInterface
+-{
+-  virtual ~CustomDelimsInterface() {}
+-  virtual std::ostream& stream(std::ostream&) = 0;
++struct custom_delims_base {
++    virtual ~custom_delims_base() {}
++    virtual std::ostream &stream(std::ostream &) = 0;
+ };
+ 
+ template <typename T, typename Delims>
+-struct CustomDelimsWrapper : CustomDelimsInterface
+-{
+-  CustomDelimsWrapper(const T& t_) : t(t_) {}
++struct custom_delims_wrapper : custom_delims_base {
++    custom_delims_wrapper(const T &t_) : t(t_) {}
+ 
+-  std::ostream& stream(std::ostream& s) { return s << PrintContainerHelper<T, char, std::char_traits<char>, Delims>(t); }
++    std::ostream &stream(std::ostream &s) {
++        return s << print_container_helper<T, char, std::char_traits<char>, Delims>(t);
++    }
+ 
+- private:
+-  const T& t;
++private:
++    const T &t;
+ };
+ 
+ template <typename Delims>
+-struct CustomDelims
+-{
+-  template <typename Container>
+-  CustomDelims(const Container& c) : base(new CustomDelimsWrapper<Container, Delims>(c))
+-  {
+-  }
+-
+-  std::unique_ptr<CustomDelimsInterface> base;
++struct custom_delims {
++    template <typename Container>
++    custom_delims(const Container &c) : base(new custom_delims_wrapper<Container, Delims>(c)) {}
++
++    std::unique_ptr<custom_delims_base> base;
+ };
+ 
+ template <typename TChar, typename TCharTraits, typename Delims>
+-inline std::basic_ostream<TChar, TCharTraits>& operator<<(std::basic_ostream<TChar, TCharTraits>& s, const CustomDelims<Delims>& p)
+-{
+-  return p.base->stream(s);
++inline std::basic_ostream<TChar, TCharTraits> &operator<<(std::basic_ostream<TChar, TCharTraits> &s,
++                                                          const custom_delims<Delims> &p) {
++    return p.base->stream(s);
+ }
+ 
+ }  // namespace utils
+@@ -268,13 +236,12 @@ inline std::basic_ostream<TChar, TCharTraits>& operator<<(std::basic_ostream<TCh
+ // Can we do better?
+ 
+ namespace std {
+-// Prints a container to the stream using default Delimiters
++// Prints a container to the stream using default delimiters
+ 
+ template <typename T, typename TChar, typename TCharTraits>
+-inline typename enable_if<::utils::IsContainer<T>::value, basic_ostream<TChar, TCharTraits>&>::type operator<<(
+-    basic_ostream<TChar, TCharTraits>& stream, const T& container)
+-{
+-  return stream << ::utils::PrintContainerHelper<T, TChar, TCharTraits>(container);
++inline typename enable_if<::utils::is_container<T>::value, basic_ostream<TChar, TCharTraits> &>::type operator<<(
++    basic_ostream<TChar, TCharTraits> &stream, const T &container) {
++    return stream << ::utils::print_container_helper<T, TChar, TCharTraits>(container);
+ }
+ 
+ }  // namespace std
+\ No newline at end of file

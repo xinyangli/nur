@@ -1,0 +1,12 @@
+diff --git a/src/operation/iCTS/api/CTSAPI.hh b/src/operation/iCTS/api/CTSAPI.hh
+index 86ff3565..bef443a0 100644
+--- a/src/operation/iCTS/api/CTSAPI.hh
++++ b/src/operation/iCTS/api/CTSAPI.hh
+@@ -27,6 +27,7 @@
+ #include <string_view>
+ #include <type_traits>
+ #include <vector>
++#include <optional>
+ 
+ #include "../../../database/interaction/ids.hpp"
+ 
