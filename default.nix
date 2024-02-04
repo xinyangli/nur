@@ -16,8 +16,8 @@ with pkgs;
   modules = import ./modules; # NixOS modules
   overlays = import ./overlays; # nixpkgs overlays
 
-  example-package = callPackage ./pkgs/example-package { };
   nvboard = callPackage ./pkgs/nvboard { };
-  # some-qt5-package = pkgs.libsForQt5.callPackage ./pkgs/some-qt5-package { };
-  # ...
+  ieda = callPackage ./pkgs/ieda { };
+  abstract-machine = callPackage ./pkgs/abstract-machine { };
+  pcap2socks = callPackage ./pkgs/pcap2socks { };
 }
