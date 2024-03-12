@@ -15,7 +15,8 @@ with pkgs;
   lib = import ./lib { inherit pkgs; }; # functions
   modules = import ./modules; # NixOS modules
   overlays = import ./overlays; # nixpkgs overlays
-
+  
+  circt143 = callPackage ./pkgs/circt { circtVersion = "1.43.0"; };
   nvboard = callPackage ./pkgs/nvboard { };
   ieda = callPackage ./pkgs/ieda { };
   abstract-machine = callPackage ./pkgs/abstract-machine { };
