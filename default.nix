@@ -21,4 +21,5 @@ with pkgs;
   ieda = callPackage ./pkgs/ieda { };
   abstract-machine = callPackage ./pkgs/abstract-machine { };
   pcap2socks = callPackage ./pkgs/pcap2socks { };
+  mini-gdbstub = callPackage ./pkgs/mini-gdbstub { };
 }
