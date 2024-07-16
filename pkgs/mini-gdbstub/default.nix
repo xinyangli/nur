@@ -6,13 +6,13 @@
 
 stdenv.mkDerivation rec {
   pname = "mini-gdbstub";
-  version = "2024-04-25";
+  version = "2024-07-16";
 
   src = fetchFromGitHub {
     owner = "xinyangli";
     repo = "mini-gdbstub";
-    rev = "b434a22822b1d2f5a067faf621f9d246c70f3a93";
-    hash = "sha256-tnnpwfYpVhIufbz+2rgiUhspo+Cuqco35b+eax20vQo=";
+    rev = "f89e5ffc7a68de26c586e96a0c001873d184c7b2";
+    hash = "sha256-sgQ/4jlZXxK5pOz5mb7WxkjkWQa688z4p4A9Fva8144=";
   };
 
   nativeBuildInputs = [
