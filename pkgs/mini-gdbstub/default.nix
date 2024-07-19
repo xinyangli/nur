@@ -11,8 +11,8 @@ stdenv.mkDerivation rec {
   src = fetchFromGitHub {
     owner = "xinyangli";
     repo = "mini-gdbstub";
-    rev = "f89e5ffc7a68de26c586e96a0c001873d184c7b2";
-    hash = "sha256-sgQ/4jlZXxK5pOz5mb7WxkjkWQa688z4p4A9Fva8144=";
+    rev = "0aff46d138960f59b1fa4f31bc7a5afbf15a9811";
+    hash = "sha256-aDe+46teDiEbdACr44881fGTEGVhKKMHvLuA5xH79cQ=";
   };
 
   nativeBuildInputs = [
